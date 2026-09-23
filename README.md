@@ -17,7 +17,20 @@ npm install
 npm start
 ```
 
-Do not start `node index.js` before `npm install` has completed. For a hosting panel, use `index.js` as the startup file, `npm install` as the install command, and `npm start` as the start command.
+Do not start `node index.js` directly on a new server. `npm start` runs a dependency check first and automatically runs `npm ci` from the lockfile when `node_modules/` is missing.
+
+### Pterodactyl deployment
+
+Upload the project files, including `package.json`, `package-lock.json`, `scripts/ensure-deps.js`, and `start.sh`. Do not upload an old or partial `node_modules/` directory. Configure the server as follows:
+
+| Panel setting | Value |
+| --- | --- |
+| Startup command | `bash start.sh` |
+| Install command | `npm ci --omit=dev --no-audit --no-fund` |
+| Working directory | The directory containing `package.json` |
+| Node image | Node.js 20 or newer |
+
+If the panel has no separate install-command field, `bash start.sh` still installs missing dependencies automatically before starting the bot. If you use the startup command `npm start` instead, the same bootstrap runs through the `prestart` script. The server must have outbound HTTPS access so npm can reach the registry during the first boot.
 
 ## First connection
 

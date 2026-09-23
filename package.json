@@ -4,6 +4,7 @@
   "description": "Plugin-based WhatsApp bot using Baileys",
   "main": "index.js",
   "scripts": {
+    "prestart": "node scripts/ensure-deps.js",
     "start": "node index.js"
   },
   "engines": {
