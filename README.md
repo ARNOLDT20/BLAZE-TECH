@@ -30,7 +30,7 @@ Upload the project files, including `package.json`, `package-lock.json`, `script
 | Working directory | The directory containing `package.json` |
 | Node image | Node.js 20 or newer |
 
-If the panel has no separate install-command field, `bash start.sh` still installs missing dependencies automatically before starting the bot. If you use the startup command `npm start` instead, the same bootstrap runs through the `prestart` script. The server must have outbound HTTPS access so npm can reach the registry during the first boot.
+If the panel has no separate install-command field, `bash start.sh` still installs missing dependencies automatically before starting the bot. The entrypoint also performs this check itself, so Katabump's default direct command `node index.js` is supported as well. If you use the startup command `npm start` instead, the same bootstrap runs through the `prestart` script. The server must have outbound HTTPS access so npm can reach the registry during the first boot.
 
 ## First connection
 
