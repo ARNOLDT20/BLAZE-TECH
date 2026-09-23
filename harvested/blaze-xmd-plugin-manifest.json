@@ -1,0 +1,1071 @@
+{
+  "source": "BLAZE-XMD-main(12).zip",
+  "pluginCount": 100,
+  "plugins": [
+    {
+      "file": "BLAZE-XMD-main/plugins/Audio-Edit/audioedit.js",
+      "command": "deep",
+      "aliases": [],
+      "category": "Audio-Edit",
+      "description": "",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/Conversion/conversion.js",
+      "command": "sticker",
+      "aliases": [],
+      "category": "Conversion",
+      "description": "",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/Download/apk.js",
+      "command": "apk",
+      "aliases": [],
+      "category": "Download",
+      "description": "",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/Download/facebook.js",
+      "command": "fb",
+      "aliases": [],
+      "category": "Download",
+      "description": "",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/Download/fb-dl.js",
+      "command": "facebook",
+      "aliases": [],
+      "category": "Download",
+      "description": "",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/Download/getcmd.js",
+      "command": "getcmd",
+      "aliases": [],
+      "category": "Download",
+      "description": "Get command file information and code",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/Download/gitclone.js",
+      "command": "gitclone",
+      "aliases": [],
+      "category": "Download",
+      "description": "",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/Download/instagram.js",
+      "command": "instagram",
+      "aliases": [
+        "ig",
+        "igdl",
+        "instadl"
+      ],
+      "category": "Download",
+      "description": "",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/Download/pinterest.js",
+      "command": "pinterest",
+      "aliases": [
+        "pin",
+        "pindl"
+      ],
+      "category": "Download",
+      "description": "Download Pinterest image or video",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/Download/rw.js",
+      "command": "rw",
+      "aliases": [],
+      "category": "Download",
+      "description": "",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/Download/secreenshort.js",
+      "command": "screenshot",
+      "aliases": [],
+      "category": "Download",
+      "description": "",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/Download/social.js",
+      "command": "dl",
+      "aliases": [
+        "download",
+        "socialdl",
+        "sdl",
+        "twitter",
+        "tw",
+        "x",
+        "twitterdl",
+        "facebook",
+        "fbdownload"
+      ],
+      "category": "Download",
+      "description": "Download public videos from supported social-media links",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/Download/tiktok.js",
+      "command": "tiktok",
+      "aliases": [
+        "ttdl",
+        "tt",
+        "tiktokdl"
+      ],
+      "category": "Download",
+      "description": "",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/Download/videologo.js",
+      "command": "videologo",
+      "aliases": [],
+      "category": "Download",
+      "description": "",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/Download/youtube.js",
+      "command": "youtube",
+      "aliases": [
+        "ytmp3",
+        "yta",
+        "ytaudio"
+      ],
+      "category": "Download",
+      "description": "Download YouTube audio from link",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/Fun/fancy.js",
+      "command": "fancy",
+      "aliases": [],
+      "category": "Funny",
+      "description": "",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/Fun/funny.js",
+      "command": "joke",
+      "aliases": [
+        "funny",
+        "lol"
+      ],
+      "category": "Funny",
+      "description": "Send a short clean joke.",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/Fun/riddle.js",
+      "command": "riddle",
+      "aliases": [
+        "rdl"
+      ],
+      "category": "Funny",
+      "description": "Send a quick riddle with its answer.",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/Fun/rizz.js",
+      "command": "rizz",
+      "aliases": [
+        "rz"
+      ],
+      "category": "Funny",
+      "description": "Send a playful and respectful rizz line.",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/General/alive.js",
+      "command": "alive",
+      "aliases": [],
+      "category": "General",
+      "description": "",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/General/analyze.js",
+      "command": "analyze",
+      "aliases": [
+        "analyse",
+        "what",
+        "whatsin",
+        "imginfo"
+      ],
+      "category": "General",
+      "description": "Describe what is visible in a replied image.",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/General/bio.js",
+      "command": "bio",
+      "aliases": [
+        "bios",
+        "aboutme"
+      ],
+      "category": "General",
+      "description": "Set, view, list, or remove user bios.",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/General/botinfo.js",
+      "command": "botinfo",
+      "aliases": [
+        "aboutbot",
+        "systeminfo"
+      ],
+      "category": "General",
+      "description": "",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/General/bugmenu.js",
+      "command": "bugmenu",
+      "aliases": [
+        "bugs",
+        "bughelp"
+      ],
+      "category": "Bug",
+      "description": "Show safe diagnostics and bug-reporting commands.",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/General/code.js",
+      "command": "code",
+      "aliases": [
+        "plugin-code",
+        "source"
+      ],
+      "category": "Mods",
+      "description": "",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/General/contact2.js",
+      "command": "report",
+      "aliases": [],
+      "category": "General",
+      "description": "report anything to the bot developer",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/General/crsh.js",
+      "command": "crsh",
+      "aliases": [
+        "crashcheck",
+        "healthcheck"
+      ],
+      "category": "Owner",
+      "description": "Run a bounded bot health and stability check.",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/General/delete.js",
+      "command": "delete",
+      "aliases": [
+        "del",
+        "d"
+      ],
+      "category": "General",
+      "description": "Delete a replied message and the delete command.",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/General/dms.js",
+      "command": "dms",
+      "aliases": [
+        "disappear",
+        "disappearing"
+      ],
+      "category": "General",
+      "description": "",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/General/getpp.js",
+      "command": "setpp",
+      "aliases": [],
+      "category": "General",
+      "description": "",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/General/help.js",
+      "command": "help",
+      "aliases": [
+        "h",
+        "guide",
+        "commands"
+      ],
+      "category": "General",
+      "description": "Interactive help by command category.",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/General/imagegen.js",
+      "command": "imagine",
+      "aliases": [
+        "img",
+        "image",
+        "gen",
+        "draw"
+      ],
+      "category": "General",
+      "description": "Generate an image from a text prompt.",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/General/info.js",
+      "command": "info",
+      "aliases": [
+        "msginfo",
+        "messageinfo"
+      ],
+      "category": "General",
+      "description": "Show concise details about a replied message.",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/General/menu.js",
+      "command": "menu",
+      "aliases": [],
+      "category": "General",
+      "description": "",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/General/menu2.js",
+      "command": "menu2",
+      "aliases": [],
+      "category": "General",
+      "description": "",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/General/owner.js",
+      "command": "owner",
+      "aliases": [
+        "developer",
+        "dev",
+        "creator",
+        "devcontact"
+      ],
+      "category": "General",
+      "description": "",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/General/pair.js",
+      "command": "pair",
+      "aliases": [],
+      "category": "General",
+      "description": "",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/General/payment.js",
+      "command": "payment",
+      "aliases": [],
+      "category": "General",
+      "description": "",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/General/ping.js",
+      "command": "ping",
+      "aliases": [],
+      "category": "General",
+      "description": "Check bot speed and system status.",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/General/profile.js",
+      "command": "profile",
+      "aliases": [],
+      "category": "General",
+      "description": "to generate profile picture",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/General/programming.js",
+      "command": "codecheck",
+      "aliases": [
+        "inspect",
+        "codeinspect",
+        "codeinfo"
+      ],
+      "category": "Programming",
+      "description": "Detect and safely inspect replied JavaScript, Python, HTML, CSS, JSON, or text code.",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/General/prompt.js",
+      "command": "prompt",
+      "aliases": [
+        "promptgen",
+        "vision",
+        "describe"
+      ],
+      "category": "General",
+      "description": "Create a recreation prompt from a replied image.",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/General/repeat.js",
+      "command": "repeat",
+      "aliases": [
+        "repeatmsg",
+        "resend"
+      ],
+      "category": "General",
+      "description": "",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/General/repo.js",
+      "command": "repo",
+      "aliases": [],
+      "category": "General",
+      "description": "",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/General/reportbug.js",
+      "command": "reportbug",
+      "aliases": [
+        "bugreport",
+        "bug"
+      ],
+      "category": "Bug",
+      "description": "Send a concise issue report to the bot owner.",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/General/repozip.js",
+      "command": "repozip",
+      "aliases": [
+        "sourcezip",
+        "getzip"
+      ],
+      "category": "General",
+      "description": "Download the latest BLAZE-XMD main repository ZIP.",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/General/retrieve.js",
+      "command": "retrieve",
+      "aliases": [
+        "retrievetopm",
+        "sendtopm"
+      ],
+      "category": "General",
+      "description": "Retrieve accessible replied media to your private chat.",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/General/screenshot.js",
+      "command": "screenshot",
+      "aliases": [
+        "ss",
+        "sc",
+        "shot"
+      ],
+      "category": "General",
+      "description": "Capture a website from a URL.",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/General/statushistory.js",
+      "command": "statushistory",
+      "aliases": [
+        "statusanalytics",
+        "statusstats",
+        "statuslog"
+      ],
+      "category": "General",
+      "description": "View analytics and recent history for statuses posted by the bot.",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/General/tostatus.js",
+      "command": "tostatus",
+      "aliases": [
+        "statuspost",
+        "poststatus"
+      ],
+      "category": "General",
+      "description": "Post text or replied image, video, audio, or voice-note media to WhatsApp Status.",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/General/translate.js",
+      "command": "translate",
+      "aliases": [
+        "tr",
+        "trans",
+        "language"
+      ],
+      "category": "General",
+      "description": "",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/General/url.js",
+      "command": "url",
+      "aliases": [],
+      "category": "General",
+      "description": "Convert media to BLAZE URL",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/General/url2.js",
+      "command": "url2",
+      "aliases": [],
+      "category": "General",
+      "description": "",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/General/vv.js",
+      "command": "vv",
+      "aliases": [
+        "viewmedia",
+        "getmedia"
+      ],
+      "category": "General",
+      "description": "Retrieve accessible replied image or video media.",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/Group/active.js",
+      "command": "active",
+      "aliases": [
+        "actives",
+        "activity"
+      ],
+      "category": "Group",
+      "description": "List active group members and their message counts.",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/Group/add.js",
+      "command": "add",
+      "aliases": [],
+      "category": "Group",
+      "description": "",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/Group/antibot.js",
+      "command": "antibot",
+      "aliases": [],
+      "category": "Group",
+      "description": "",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/Group/antispam.js",
+      "command": "antispam",
+      "aliases": [
+        "nospam",
+        "antiflood"
+      ],
+      "category": "Group",
+      "description": "",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/Group/antisticker.js",
+      "command": "antisticker",
+      "aliases": [
+        "nosticker"
+      ],
+      "category": "Group",
+      "description": "",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/Group/badwords.js",
+      "command": "antibad",
+      "aliases": [
+        "antibadword"
+      ],
+      "category": "Group",
+      "description": "Enable or disable automatic bad-word deletion.",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/Group/bulkadmin.js",
+      "command": "bulkadmin",
+      "aliases": [],
+      "category": "Group",
+      "description": "",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/Group/closeopen.js",
+      "command": "close",
+      "aliases": [
+        "groupclose"
+      ],
+      "category": "Group",
+      "description": "",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/Group/events.js",
+      "command": "events",
+      "aliases": [],
+      "category": "Group",
+      "description": "",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/Group/groupe.js",
+      "command": "tagall",
+      "aliases": [],
+      "category": "Group",
+      "description": "",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/Group/groupinfo.js",
+      "command": "groupinfo",
+      "aliases": [
+        "ginfo",
+        "groupdetails"
+      ],
+      "category": "Group",
+      "description": "",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/Group/groupstatus.js",
+      "command": "groupstatus",
+      "aliases": [
+        "gcstatus"
+      ],
+      "category": "Group",
+      "description": "",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/Group/gstatus.js",
+      "command": "gstatus",
+      "aliases": [
+        "gs"
+      ],
+      "category": "Group",
+      "description": "",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/Group/mute.js",
+      "command": "mute",
+      "aliases": [
+        "muteuser"
+      ],
+      "category": "Group",
+      "description": "Mute a group user for a duration and remove their text messages.",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/Group/pin.js",
+      "command": "pin",
+      "aliases": [],
+      "category": "Group",
+      "description": "",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/Group/popsstand1.js",
+      "command": "reject",
+      "aliases": [],
+      "category": "Group",
+      "description": "",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/Group/setmessages.js",
+      "command": "setmessages",
+      "aliases": [],
+      "category": "Group",
+      "description": "",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/Group/tagadmin.js",
+      "command": "tagadmin",
+      "aliases": [],
+      "category": "Group",
+      "description": "",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/Group/tagging.js",
+      "command": "all",
+      "aliases": [
+        "hidetag"
+      ],
+      "category": "Group",
+      "description": "Notify every group member without printing visible mentions.",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/Group/warn.js",
+      "command": "warn",
+      "aliases": [],
+      "category": "Group",
+      "description": "",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/Logo/logo.js",
+      "command": "hacker",
+      "aliases": [],
+      "category": "Logo",
+      "description": "",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/Mods/boom.js",
+      "command": "boom",
+      "aliases": [],
+      "category": "Mods",
+      "description": "",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/Mods/mediatest.js",
+      "command": "mediatest",
+      "aliases": [
+        "mt",
+        "pairedmedia"
+      ],
+      "category": "Mods",
+      "description": "",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/Mods/mods.js",
+      "command": "telesticker",
+      "aliases": [],
+      "category": "Mods",
+      "description": "",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/Mods/restart.js",
+      "command": "restart",
+      "aliases": [],
+      "category": "Mods",
+      "description": "",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/Other/uptime.js",
+      "command": "uptime",
+      "aliases": [],
+      "category": "General",
+      "description": "Check bot runtime & response speed",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/Search/canvacord.js",
+      "command": "canvacord",
+      "aliases": [],
+      "category": "Search",
+      "description": "",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/Search/chatbot.js",
+      "command": "chatbot",
+      "aliases": [
+        "cb"
+      ],
+      "category": "Search",
+      "description": "",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/Search/check.js",
+      "command": "check",
+      "aliases": [],
+      "category": "Search",
+      "description": "",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/Search/fluxai.js",
+      "command": "fluxai",
+      "aliases": [],
+      "category": "Search",
+      "description": "",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/Search/gpt.js",
+      "command": "gpt",
+      "aliases": [
+        "ai",
+        "ask",
+        "aiask",
+        "askgpt"
+      ],
+      "category": "Search",
+      "description": "",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/Search/groupseach.js",
+      "command": "groupsearch",
+      "aliases": [
+        "gsearch",
+        "groupsearch"
+      ],
+      "category": "Search",
+      "description": "Search public WhatsApp group links",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/Search/img.js",
+      "command": "img",
+      "aliases": [],
+      "category": "Search",
+      "description": "",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/Search/lyrics.js",
+      "command": "lyrics",
+      "aliases": [],
+      "category": "Search",
+      "description": "",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/Search/movies.js",
+      "command": "movie",
+      "aliases": [],
+      "category": "Search",
+      "description": "",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/Search/npm.js",
+      "command": "npm",
+      "aliases": [],
+      "category": "Search",
+      "description": "Search for npm package information",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/Search/play.js",
+      "command": "play",
+      "aliases": [],
+      "category": "Search",
+      "description": "Download one audio result from a public YouTube title search.",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/Search/stickersearch.js",
+      "command": "stickersearch",
+      "aliases": [],
+      "category": "Search",
+      "description": "",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/Search/tts.js",
+      "command": "dit",
+      "aliases": [],
+      "category": "Search",
+      "description": "",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/Search/weather.js",
+      "command": "weather",
+      "aliases": [],
+      "category": "Search",
+      "description": "",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/Settings/blocklist.js",
+      "command": "blocklist",
+      "aliases": [],
+      "category": "Settings",
+      "description": "",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/Settings/settings.js",
+      "command": "autocontact",
+      "aliases": [
+        "autoaddcontact",
+        "savecontacts"
+      ],
+      "category": "Settings",
+      "description": "",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/Sticker/short.js",
+      "command": "short",
+      "aliases": [
+        "tiny",
+        "shorturl",
+        "shorten",
+        "urlshort"
+      ],
+      "category": "Sticker",
+      "description": "",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/gitcme/github.js",
+      "command": "github",
+      "aliases": [
+        "githubstalk"
+      ],
+      "category": "gitcme",
+      "description": "",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/menu/Id-group.js",
+      "command": "groupid",
+      "aliases": [
+        "gcid",
+        "gid"
+      ],
+      "category": "menu",
+      "description": "Get WhatsApp Group ID and info",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    },
+    {
+      "file": "BLAZE-XMD-main/plugins/menu/id.js",
+      "command": "id",
+      "aliases": [
+        "newsletter",
+        "id"
+      ],
+      "category": "menu",
+      "description": "Get WhatsApp Channel info from link",
+      "registration": "blazetz",
+      "status": "source-imported; adapter-required"
+    }
+  ]
+}

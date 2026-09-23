@@ -1,1382 +1,368 @@
-"use strict";
-// Verify the core command registry (devblaze/blazetz.js) hasn't been
-// renamed, removed, or tampered with before anything else loads — see
-// lib/integrityGuard.js for what exactly this checks and why.
-require("./lib/integrityGuard").verifyIntegrity(__dirname);
+// Katabump and generic panel eggs may run `node index.js` directly instead of
+// invoking npm start. Bootstrap production dependencies before loading Baileys.
+require("./scripts/ensure-deps");
 
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-  var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc); 
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || function (mod) {
-    if (mod && mod.__esModule) return mod;
-    var result = {};
-    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
-    __setModuleDefault(result, mod);
-    return result;
-};
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-const baileys_1 = __importStar(require("@whiskeysockets/baileys"));
-const logger_1 = __importDefault(require("@whiskeysockets/baileys/lib/Utils/logger"));
-const logger = logger_1.default.child({});
-logger.level = 'silent';
+const {
+  default: makeWASocket,
+  useMultiFileAuthState,
+  DisconnectReason,
+  fetchLatestBaileysVersion
+} = require("@whiskeysockets/baileys");
 const pino = require("pino");
-const boom_1 = require("@hapi/boom");
-const conf = require("./settings");
-const { loadSettingsCache, getCachedSettingsSync } = require('./lib/settingsCache');
+const fs = require("fs");
+const path = require("path");
+const config = require("./config");
+const store = require("./lib/store");
+const { containsLink, isGroupAdmin, getParticipantId } = require("./lib/helpers");
+const { beautifyText } = require("./lib/beautify");
+const { sendModerationWarning } = require("./lib/moderation");
 
-/**
- * Reads a bot-wide toggle setting from the live, database-backed cache
- * (set via commands like .anticall, .setprefix, etc — see
- * plugins/Settings/settings.js), falling back to the settings.js/.env
- * default if the command has never been used yet. This is what makes
- * those toggle commands actually persist across restarts instead of
- * silently reverting.
- */
-function getConf(key) {
-    const cached = getCachedSettingsSync();
-    return (cached && cached[key] !== undefined) ? cached[key] : conf[key];
-}
+const plugins = new Map();
+const aliases = new Map();
+const pluginsDir = path.join(__dirname, "plugins");
+const state = store.load();
+config.botName = state.botName || config.botName;
+config.prefix = state.prefix || config.prefix;
+config.watermarkText = state.watermarkText || config.watermarkText;
+config.reactionNotice = state.reactionNotice || config.reactionNotice;
+let reconnectTimer;
+let starting = false;
+let socket;
+let autoPosterTimer;
 
-const { cacheLidPhone, resolveLidToJid, resolveLidForStatus } = require('./lib/lidResolver');
-const axios = require("axios");
-let fs = require("fs-extra");
-let path = require("path");
-const FileType = require('file-type');
-const { Sticker, createSticker, StickerTypes } = require('wa-sticker-formatter');
+function loadPlugins() {
+  if (!fs.existsSync(pluginsDir)) fs.mkdirSync(pluginsDir, { recursive: true });
+  plugins.clear();
+  aliases.clear();
+  const commandNames = new Set();
 
-// Wire fluent-ffmpeg to the bundled ffmpeg binary from @ffmpeg-installer/ffmpeg.
-// Heroku's stack has no system ffmpeg installed (no ffmpeg buildpack is
-// configured in app.json), so any command using fluent-ffmpeg for
-// audio/video conversion would otherwise fail with "ffmpeg not found".
-// This makes every fluent-ffmpeg call anywhere in the project (it's a
-// singleton module) use the bundled binary automatically — no extra
-// buildpack needed.
-try {
-    const ffmpeg = require('fluent-ffmpeg');
-    const ffmpegInstaller = require('@ffmpeg-installer/ffmpeg');
-    ffmpeg.setFfmpegPath(ffmpegInstaller.path);
-    console.log('✅ ffmpeg path set to bundled binary:', ffmpegInstaller.path);
-} catch (e) {
-    console.log('⚠️ Could not set bundled ffmpeg path:', e.message);
-}
+  const shortAliases = {
+    ping: "p", alive: "a", menu: "m", help: "h", aura: "ar", setname: "sn",
+    channel: "ch", chan: "c", schedule: "sch", antilink: "al", warn: "w", badwords: "bw",
+    promote: "pro", demote: "de", kick: "k", add: "ad", mute: "mu",
+    unmute: "um", groupinfo: "gi", tagall: "ta", open: "op", close: "cl",
+    setsubject: "ss", setdesc: "sd", invite: "inv", statusreact: "sr",
+    status: "st", addstatus: "as", statuspost: "sp", selfstatus: "self",
+    mystatus: "me", groupstatus: "gs", gcstatus: "gc", viewonce: "vv", download: "dl", save: "sv",
+    prefix: "px", menuimage: "mi", menustyle: "ms", brand: "br"
+  };
 
-const { verifierEtatJid , recupererActionJid } = require("./lib/antilien");
-const { atbverifierEtatJid , atbrecupererActionJid } = require("./lib/antibot");
-let evt = require(__dirname + "/devblaze/blazetz");
-const {isUserBanned , addUserToBanList , removeUserFromBanList} = require("./lib/banUser");
-const  {addGroupToBanList,isGroupBanned,removeGroupFromBanList} = require("./lib/banGroup");
-const {isGroupOnlyAdmin,addGroupToOnlyAdminList,removeGroupFromOnlyAdminList} = require("./lib/onlyAdmin");
-let { reagir } = require(__dirname + "/devblaze/app");
-const { getAllSudoNumbers } = require("./lib/sudo");
-let cachedSudoNumbers = [];
-async function refreshSudoCache() {
-    try { cachedSudoNumbers = await getAllSudoNumbers(); } catch (e) {}
-}
-refreshSudoCache();
-setInterval(refreshSudoCache, 30000);
-var session = conf.session.replace(/BLAZE-TECH~/g,"");
-const prefixe = conf.PREFIXE;
-const more = String.fromCharCode(8206)
-const readmore = more.repeat(4001)
-const express = require('express');
-
-const app = express();
-const PORT = process.env.PORT || 3000;
-
-// Serve static files from the 'public' directory
-app.use(express.static(path.join(__dirname, 'public')));
-
-app.listen(PORT, () => {
-  console.log(`Server is running at http://localhost:${PORT}`);
-});
-async function authentification() {
+  for (const file of fs.readdirSync(pluginsDir).filter(file => file.endsWith(".js"))) {
     try {
-        if (!fs.existsSync(__dirname + "/public/creds.json")) {
-            console.log("Connecting...");
-            await fs.writeFileSync(__dirname + "/public/creds.json", atob(session), "utf8");
+      const fullPath = path.join(pluginsDir, file);
+      delete require.cache[require.resolve(fullPath)];
+      const plugin = require(fullPath);
+      if (!plugin.command || typeof plugin.run !== "function") {
+        console.warn(`Skipping ${file}: plugin must export command and run().`);
+        continue;
+      }
+      const names = Array.isArray(plugin.command) ? plugin.command : [plugin.command];
+      for (const name of names) {
+        const normalized = String(name).trim().toLowerCase();
+        commandNames.add(normalized);
+        plugins.set(normalized, plugin);
+        if (shortAliases[normalized]) {
+          aliases.set(shortAliases[normalized], normalized);
+          plugins.set(shortAliases[normalized], plugin);
         }
-        else if (fs.existsSync(__dirname + "/public/creds.json") && session != "zokk") {
-            await fs.writeFileSync(__dirname + "/public/creds.json", atob(session), "utf8");
-        }
-    }
-    catch (e) {
-        console.log("Session Invalid " + e);
-        return;
-    }
-}
-authentification();
-const { makeStore } = require(__dirname + "/lib/MakeStore");
-const store = makeStore();
-
-// ================== RECONNECT GUARD ==================
-// Prevents overlapping main() calls / double reconnections which
-// were causing the bot to restart repeatedly.
-let isReconnecting = false;
-function safeReconnect(reason) {
-    if (isReconnecting) {
-        console.log(`Reconnect already in progress, skipping duplicate trigger (${reason})`);
-        return;
-    }
-    isReconnecting = true;
-    console.log(`Reconnecting... (${reason})`);
-    setTimeout(() => {
-        main();
-    }, 2000);
-}
-
-// ================== AUTO FOLLOW / AUTO LIKE (style: BLAZE-MD) ==================
-const CHANNEL_JID = '120363421014261315@newsletter';
-const CHANNEL_EMOJIS = ['❤️', '🫪', '👍🏻', '🤩', '⚡', '🗿', '😮'];
-const STATUS_EMOJIS = ['❤️', '🩶', '🔥', '🤍', '♦️', '🎉', '💚', '💯', '✨', '☢️', '😍', '🎊'];
-let hasFollowedChannel = false;
-
-// boundedReconnect: for dangerous cases (badSession, connectionReplaced)
-// that may indicate a persistent session problem. We try only a few times
-// (with increasing backoff) instead of giving up completely OR trying forever.
-let boundedAttempts = 0;
-const MAX_BOUNDED_ATTEMPTS = 5;
-function boundedReconnect(reason) {
-    if (isReconnecting) {
-        console.log(`Reconnect already in progress, skipping duplicate trigger (${reason})`);
-        return;
-    }
-    boundedAttempts++;
-    if (boundedAttempts > MAX_BOUNDED_ATTEMPTS) {
-        console.log(`❌ Failed to reconnect after ${MAX_BOUNDED_ATTEMPTS} attempts (${reason}). Please generate a new SESSION_ID and redeploy.`);
-        return;
-    }
-    isReconnecting = true;
-    const backoffMs = Math.min(5000 * boundedAttempts, 30000);
-    console.log(`Reconnecting (bounded, attempt ${boundedAttempts}/${MAX_BOUNDED_ATTEMPTS})... (${reason}) in ${backoffMs}ms`);
-    setTimeout(() => {
-        main();
-    }, backoffMs);
-}
-// =======================================================
-
-async function main() {
-        // Load persisted bot-wide settings (anticall, prefix, etc.) before
-        // anything else, so the very first connection already reflects
-        // whatever was set via commands, not just the .env defaults.
-        await loadSettingsCache().catch((e) => console.log('⚠️ settings cache load failed:', e.message));
-
-        const { version, isLatest } = await (0, baileys_1.fetchLatestBaileysVersion)();
-        const { state, saveCreds } = await (0, baileys_1.useMultiFileAuthState)(__dirname + "/public");
-        const sockOptions = {
-            version,
-            logger: pino({ level: "silent" }),
-            browser: ['Blaze-Tech', "safari", "1.0.0"],
-            printQRInTerminal: true,
-            fireInitQueries: false,
-            shouldSyncHistoryMessage: (msg) => {
-                // Skip full history sync (matches Baileys' own default
-                // behavior) while still allowing lighter sync types
-                // needed for LID mapping / group participation.
-                return msg?.syncType !== 2;
-            },
-            downloadHistory: false,
-            syncFullHistory: false,
-            generateHighQualityLinkPreview: true,
-            markOnlineOnConnect: false,
-            keepAliveIntervalMs: 30_000,
-            auth: {
-                creds: state.creds,
-                keys: (0, baileys_1.makeCacheableSignalKeyStore)(state.keys, logger),
-            },
-            getMessage: async (key) => {
-                if (store) {
-                    const msg = store.loadMessage(key.remoteJid, key.id);
-                    return msg?.message || undefined;
-                }
-                return {
-                    conversation: 'An Error Occurred, Repeat Command!'
-                };
-            }
-        };
-        const client = (0, baileys_1.default)(sockOptions);
-store.bind(client.ev);
-
-// Passively learn LID↔phone-number mappings as Baileys itself resolves
-// them internally — this is what makes @lid-only identities (see
-// lib/lidResolver.js for why they're a problem) already resolved by the
-// time a status/message needing them arrives, instead of only trying to
-// resolve on-demand.
-if (client.signalRepository?.lidMapping?.on) {
-    client.signalRepository.lidMapping.on('update', (updates) => {
-        for (const update of updates) {
-            if (update.lid && update.pn) {
-                const lidNum = update.lid.split('@')[0].split(':')[0];
-                const phoneNum = update.pn.split('@')[0].split(':')[0].replace(/\D/g, '');
-                cacheLidPhone(lidNum, phoneNum);
-            }
-        }
-    });
-}
-client.ev.on('lid-mapping.update', (map) => {
-    for (const [lid, phoneNumber] of Object.entries(map || {})) {
-        const lidClean = lid.split('@')[0].split(':')[0];
-        const phoneClean = String(phoneNumber).split('@')[0].split(':')[0].replace(/\D/g, '');
-        cacheLidPhone(lidClean, phoneClean);
-    }
-});
-
-   const rateLimit = new Map();
-
-// Silent Rate Limiting (No Logs)
-function isRateLimited(jid) {
-    const now = Date.now();
-    if (!rateLimit.has(jid)) {
-        rateLimit.set(jid, now);
-        return false;
-    }
-    const lastRequestTime = rateLimit.get(jid);
-    if (now - lastRequestTime < 3000) {
-        return true;
-    }
-    rateLimit.set(jid, now);
-    return false;
-}
-
-// Silent Group Metadata Fetch (Handles Errors Without Logging)
-const groupMetadataCache = new Map();
-async function getGroupMetadata(client, groupId) {
-    if (groupMetadataCache.has(groupId)) {
-        return groupMetadataCache.get(groupId);
-    }
-
-    try {
-        const metadata = await client.groupMetadata(groupId);
-        groupMetadataCache.set(groupId, metadata);
-        setTimeout(() => groupMetadataCache.delete(groupId), 60000);
-        return metadata;
+      }
+      console.log(`Loaded plugin: ${file}`);
     } catch (error) {
-        if (error.message.includes("rate-overlimit")) {
-            await new Promise(res => setTimeout(res, 5000));
-        }
-        return null;
+      console.error(`Could not load plugin ${file}:`, error.stack || error.message);
     }
-}
-
-// Silent Error Handling (Prevents Crashes)
-process.on("uncaughtException", (err) => { console.log("UNCAUGHT EXCEPTION:", err); });
-process.on("unhandledRejection", (err) => { console.log("UNHANDLED REJECTION:", err); });
-
-// Silent Message Handling
-client.ev.on("messages.upsert", async (m) => {
-    const { messages } = m;
-    if (!messages || messages.length === 0) return;
-
-    for (const ms of messages) {
-        if (!ms.message) continue;
-        const from = ms.key.remoteJid;
-        if (isRateLimited(from)) continue;
-    }
-});
-
-// ================== AUTO LIKE STATUS + AUTO LIKE CHANNEL POST (style: BLAZE-MD) ==================
-client.ev.on("messages.upsert", async (m) => {
-    try {
-        const { messages } = m;
-        if (!messages || messages.length === 0) return;
-
-        for (const mek of messages) {
-            const remoteJid = mek.key?.remoteJid;
-            if (!remoteJid || mek.message?.protocolMessage) continue;
-            // Never act on reactions themselves — reacting to a reaction
-            // (e.g. someone reacting to a status) would otherwise let the
-            // bot's own reactions re-trigger this listener in a loop.
-            const _mtype = (0, baileys_1.getContentType)(mek.message);
-            if (_mtype === 'reactionMessage') continue;
-
-            // Auto-like status updates
-            if (remoteJid === "status@broadcast") {
-                if ((getConf('AUTO_REACT_STATUS') || "").toLowerCase() === "on") {
-                    try {
-                        if (!global._statusSeen) global._statusSeen = new Set();
-                        const statusId = mek.key?.id || '';
-                        if (statusId) {
-                            if (global._statusSeen.has(statusId)) continue;
-                            global._statusSeen.add(statusId);
-                            if (global._statusSeen.size > 300) global._statusSeen.delete(global._statusSeen.values().next().value);
-                        }
-
-                        let posterJid = mek.key?.participant || mek.participant;
-                        if (!posterJid) {
-                            console.log('[autolikestatus] skipped: no posterJid on status message');
-                            continue;
-                        }
-
-                        const resolvedJid = posterJid.endsWith('@lid')
-                            ? await resolveLidForStatus(client, posterJid)
-                            : posterJid;
-
-                        let botJid;
-                        try {
-                            botJid = client.decodeJid ? client.decodeJid(client.user.id) : null;
-                        } catch (e) { botJid = null; }
-                        if (!botJid) {
-                            botJid = (client.user.id || '').split(':')[0].split('@')[0] + '@s.whatsapp.net';
-                        }
-
-                        const emoji = STATUS_EMOJIS[Math.floor(Math.random() * STATUS_EMOJIS.length)];
-
-                        await client.sendMessage(
-                            "status@broadcast",
-                            { react: { text: emoji, key: { ...mek.key, participant: resolvedJid } } },
-                            { statusJidList: [resolvedJid, botJid].filter(Boolean) }
-                        );
-
-                        console.log(
-                            '[autolikestatus] reacted to status from', posterJid,
-                            resolvedJid !== posterJid ? `(resolved to ${resolvedJid})` : '(unresolved @lid — best-effort, may not show on WhatsApp)',
-                            'with', emoji
-                        );
-                    } catch (e) {
-                        console.log('[autolikestatus] failed:', e.message || e);
-                    }
-                }
-                continue;
-            }
-
-            // Auto-like BLAZE Tech channel posts (always on, matches BLAZE-MD)
-            if (remoteJid === CHANNEL_JID) {
-                try {
-                    const messageId = mek.key?.server_id || mek.newsletterServerId || mek.key.id;
-                    if (!messageId || !client?.user?.id) continue;
-                    const emoji = CHANNEL_EMOJIS[Math.floor(Math.random() * CHANNEL_EMOJIS.length)];
-                    const delay = 3000 + Math.floor(Math.random() * 7000);
-                    await new Promise((r) => setTimeout(r, delay));
-                    if (typeof client.newsletterReactMessage === "function") {
-                        await client.newsletterReactMessage(remoteJid, messageId.toString(), emoji);
-                    }
-                } catch (e) {}
-            }
-        }
-    } catch (e) {}
-});
-
-// Silent Group Updates
-client.ev.on("groups.update", async (updates) => {
-    for (const update of updates) {
-        const { id } = update;
-        if (!id.endsWith("@g.us")) continue;
-        await getGroupMetadata(client, id);
-    }
-});     
-
-// ================== ANTISPAM / ANTISTICKER ENFORCEMENT (style: BLAZE-MD) ==================
-const { getGroupFeature, addGroupWarn, resetGroupWarn } = require(__dirname + "/lib/groupProtection");
-const _spamMsgLog = new Map();
-const SPAM_THRESHOLD = 5;
-const SPAM_WINDOW_MS = 5000;
-const GROUP_PROTECTION_MAX_WARNS = 3;
-
-function _trackSpamMessage(key) {
-    const now = Date.now();
-    if (!_spamMsgLog.has(key)) _spamMsgLog.set(key, []);
-    const timestamps = _spamMsgLog.get(key).filter((t) => now - t < SPAM_WINDOW_MS);
-    timestamps.push(now);
-    _spamMsgLog.set(key, timestamps);
-    if (_spamMsgLog.size > 5000) {
-        const first = _spamMsgLog.keys().next().value;
-        _spamMsgLog.delete(first);
-    }
-    return timestamps.length;
-}
-
-client.ev.on("messages.upsert", async (m) => {
-    try {
-        const { messages } = m;
-        if (!messages || messages.length === 0) return;
-
-        for (const mek of messages) {
-            if (mek.key?.fromMe) continue;
-            if ((0, baileys_1.getContentType)(mek.message) === 'reactionMessage') continue;
-            const groupId = mek.key?.remoteJid;
-            if (!groupId || !groupId.endsWith("@g.us")) continue;
-
-            const sender = mek.key?.participant;
-            if (!sender) continue;
-            const senderNum = sender.split("@")[0];
-
-            let meta;
-            try {
-                meta = await getGroupMetadata(client, groupId);
-            } catch (e) { continue; }
-            if (!meta || !Array.isArray(meta.participants)) continue;
-
-            const botNum = (client.user?.id || "").split(":")[0].split("@")[0];
-            const isSenderAdmin = meta.participants.some((p) => p.id?.split("@")[0] === senderNum && (p.admin === "admin" || p.admin === "superadmin"));
-            const isBotAdmin = meta.participants.some((p) => p.id?.split("@")[0] === botNum && (p.admin === "admin" || p.admin === "superadmin"));
-            if (isSenderAdmin) continue;
-
-            // ---- ANTISTICKER ----
-            if (mek.message?.stickerMessage) {
-                const mode = await getGroupFeature(groupId, "antisticker");
-                if (mode !== "off") {
-                    if (!isBotAdmin) {
-                    } else {
-                        const deleteKey = { remoteJid: groupId, fromMe: false, id: mek.key.id, participant: sender };
-                        await client.sendMessage(groupId, { delete: deleteKey }).catch(() => {});
-
-                        if (mode === "kick") {
-                            await client.groupParticipantsUpdate(groupId, [sender], "remove").catch(() => {});
-                            await client.sendMessage(groupId, { text: `🌟 *ANTISTICKER*\n@${senderNum} was removed for sending a sticker.`, mentions: [sender] }).catch(() => {});
-                        } else {
-                            const count = await addGroupWarn(groupId, "antisticker", senderNum);
-                            if (count >= GROUP_PROTECTION_MAX_WARNS) {
-                                await resetGroupWarn(groupId, "antisticker", senderNum);
-                                await client.groupParticipantsUpdate(groupId, [sender], "remove").catch(() => {});
-                                await client.sendMessage(groupId, { text: `🌟 *ANTISTICKER*\n@${senderNum} removed after reaching the warn limit.`, mentions: [sender] }).catch(() => {});
-                            } else {
-                                await client.sendMessage(groupId, { text: `🌟 *ANTISTICKER*\n@${senderNum} warned (${count}/${GROUP_PROTECTION_MAX_WARNS}) — stickers aren't allowed here.`, mentions: [sender] }).catch(() => {});
-                            }
-                        }
-                    }
-                }
-                continue;
-            }
-
-            // ---- ANTISPAM ----
-            const spamMode = await getGroupFeature(groupId, "antispam");
-            if (spamMode !== "off" && mek.message) {
-                const count = _trackSpamMessage(groupId + ":" + senderNum);
-                if (count >= SPAM_THRESHOLD) {
-                    _spamMsgLog.delete(groupId + ":" + senderNum);
-                    if (isBotAdmin) {
-                        if (spamMode === "kick") {
-                            await client.groupParticipantsUpdate(groupId, [sender], "remove").catch(() => {});
-                            await client.sendMessage(groupId, { text: `🛡️ *ANTISPAM*\n@${senderNum} was kicked for spamming.`, mentions: [sender] }).catch(() => {});
-                        } else {
-                            const warnCount = await addGroupWarn(groupId, "antispam", senderNum);
-                            if (warnCount >= GROUP_PROTECTION_MAX_WARNS) {
-                                await resetGroupWarn(groupId, "antispam", senderNum);
-                                await client.groupParticipantsUpdate(groupId, [sender], "remove").catch(() => {});
-                                await client.sendMessage(groupId, { text: `🛡️ *ANTISPAM*\n@${senderNum} removed after reaching the warn limit.`, mentions: [sender] }).catch(() => {});
-                            } else {
-                                await client.sendMessage(groupId, { text: `🛡️ *ANTISPAM*\n@${senderNum}, stop spamming! (${warnCount}/${GROUP_PROTECTION_MAX_WARNS})`, mentions: [sender] }).catch(() => {});
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    } catch (e) {}
-});
-
-
-const moment = require("moment-timezone");
-
-client.ev.on("messages.upsert", async (m) => {
-    if (getConf('ANTIDELETE') === "on") {
-        const { messages } = m;
-        const ms = messages[0];
-        if (!ms.message) return;
-        if ((0, baileys_1.getContentType)(ms.message) === 'reactionMessage') return;
-
-        const messageKey = ms.key;
-        const remoteJid = messageKey.remoteJid;
-
-        if (!store.chats[remoteJid]) {
-            store.chats[remoteJid] = [];
-        }
-
-        store.chats[remoteJid].push(ms);
-
-        if (ms.message.protocolMessage && ms.message.protocolMessage.type === 0) {
-            const deletedKey = ms.message.protocolMessage.key;
-            const chatMessages = store.chats[remoteJid];
-            const deletedMessage = chatMessages.find(
-                (msg) => msg.key.id === deletedKey.id
-            );
-
-            if (deletedMessage) {
-                try {
-                    const participant = deletedMessage.key.participant || deletedMessage.key.remoteJid;
-                    const name = `@${participant.split("@")[0]}`;
-                    const ownerNumForDelete = (getConf('NUMERO_OWNER') || conf.NUMERO_OWNER || '').replace(/[^0-9]/g, '');
-                    const botOwnJid = (client.user?.id || '').split(':')[0].split('@')[0] + '@s.whatsapp.net';
-                    const botOwnerJid = ownerNumForDelete
-                        ? `${ownerNumForDelete}@s.whatsapp.net`
-                        : botOwnJid;
-
-                    const date = moment().tz("Africa/Nairobi").format("DD/MM/YYYY");
-                    const time = moment().tz("Africa/Nairobi").format("HH:mm:ss");
-
-                    const boxHeader = `╭───────────────━⊷\n`;
-                    const boxFooter = `╰───────────────━⊷`;
-                    const boxBody = `
-║ *🗑️ DELETED MESSAGE*
-║══════════════════════
-║ 👤 From: ${name}
-║══════════════════════
-║ 📅 Date: ${date}
-║══════════════════════
-║ 🕒 Time: ${time}
-║══════════════════════`;
-
-                    const fullText = `${boxHeader}${boxBody}\n${boxFooter}`;
-
-                    if (deletedMessage.message.conversation) {
-                        await client.sendMessage(botOwnerJid, {
-                            text: `${fullText}\n\n📝 *Message:* ${deletedMessage.message.conversation}`,
-                            mentions: [participant],
-                        });
-                    } else if (deletedMessage.message.imageMessage) {
-                        const caption = deletedMessage.message.imageMessage.caption || '';
-                        const imagePath = await client.downloadAndSaveMediaMessage(deletedMessage.message.imageMessage);
-                        await client.sendMessage(botOwnerJid, {
-                            image: { url: imagePath },
-                            caption: `${fullText}\n\n🖼️ ${caption}`,
-                            mentions: [participant],
-                        });
-                    } else if (deletedMessage.message.videoMessage) {
-                        const caption = deletedMessage.message.videoMessage.caption || '';
-                        const videoPath = await client.downloadAndSaveMediaMessage(deletedMessage.message.videoMessage);
-                        await client.sendMessage(botOwnerJid, {
-                            video: { url: videoPath },
-                            caption: `${fullText}\n\n🎬 ${caption}`,
-                            mentions: [participant],
-                        });
-                    } else if (deletedMessage.message.audioMessage) {
-                        const audioPath = await client.downloadAndSaveMediaMessage(deletedMessage.message.audioMessage);
-                        await client.sendMessage(botOwnerJid, {
-                            audio: { url: audioPath },
-                            ptt: true,
-                            caption: `${fullText}\n🔊 Deleted Voice`,
-                            mentions: [participant],
-                        });
-                    } else if (deletedMessage.message.stickerMessage) {
-                        const stickerPath = await client.downloadAndSaveMediaMessage(deletedMessage.message.stickerMessage);
-                        await client.sendMessage(botOwnerJid, {
-                            sticker: { url: stickerPath },
-                            caption: `${fullText}\n🗑️ Deleted Sticker`,
-                            mentions: [participant],
-                        });
-                    }
-                } catch (error) {
-                    console.error('❌ Error handling deleted message:', error);
-                }
-            }
-        }
-    }
-});
-const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
-
-let lastReactionTime = 0;
-
-// (Old single-emoji "💯" status auto-reactor removed — replaced by the
-// varied-emoji STATUS_EMOJIS auto-like listener added above, styled
-// after BLAZE-MD.)
-
-client.ev.on("messages.upsert", async (m) => {
-    const { messages } = m;
-    const ms = messages[0];
-
-    if (!ms.message) return;
-
-    const messageContent = ms.message.conversation || ms.message.extendedTextMessage?.text || '';
-    const sender = ms.key.remoteJid;
-
-    const prefixUsed = messageContent.charAt(0);
-
-    if (messageContent.slice(1).toLowerCase() === "vcf") {
-        if (!sender.endsWith("@g.us")) {
-            await client.sendMessage(sender, {
-                text: `❌ This command only works in groups.\n\n🚀 Blaze Tech`,
-            });
-            return;
-        }
-
-        const baseName = "Charles family";
-
-        await createAndSendGroupVCard(sender, baseName, client);
-    }
-});
-
-        client.ev.on("call", async (callData) => {
-  if (getConf('ANTICALL') === 'on') {
-    const callId = callData[0].id;
-    await client.rejectCall(callId, callData[0].from);
   }
-});
-        
-        client.ev.on("messages.upsert", async (m) => {
-            const { messages } = m;
-            const ms = messages[0];
-            if (!ms.message)
-                return;
-            const decodeJid = (jid) => {
-                if (!jid)
-                    return jid;
-                if (/:\d+@/gi.test(jid)) {
-                    let decode = (0, baileys_1.jidDecode)(jid) || {};
-                    return decode.user && decode.server && decode.user + '@' + decode.server || jid;
-                }
-                else
-                    return jid;
-            };
-            var mtype = (0, baileys_1.getContentType)(ms.message);
-
-            if (ms.key?.participant?.endsWith('@lid') && ms.key?.participantAlt && !ms.key.participantAlt.endsWith('@lid')) {
-                const lidNum = ms.key.participant.split('@')[0].split(':')[0];
-                const phoneNum = ms.key.participantAlt.split('@')[0].split(':')[0].replace(/\D/g, '');
-                cacheLidPhone(lidNum, phoneNum);
-            }
-
-            if (mtype === 'reactionMessage') return;
-            var texte = mtype == "conversation" ? ms.message.conversation : mtype == "imageMessage" ? ms.message.imageMessage?.caption : mtype == "videoMessage" ? ms.message.videoMessage?.caption : mtype == "extendedTextMessage" ? ms.message?.extendedTextMessage?.text : mtype == "buttonsResponseMessage" ?
-                ms?.message?.buttonsResponseMessage?.selectedButtonId : mtype == "listResponseMessage" ?
-                ms.message?.listResponseMessage?.singleSelectReply?.selectedRowId : mtype == "messageContextInfo" ?
-                (ms?.message?.buttonsResponseMessage?.selectedButtonId || ms.message?.listResponseMessage?.singleSelectReply?.selectedRowId || ms.text) : "";
-            var origineMessage = ms.key.remoteJid;
-            var idBot = decodeJid(client.user.id);
-            var servBot = idBot.split('@')[0];
-            const verifGroupe = origineMessage?.endsWith("@g.us");
-            var infosGroupe = verifGroupe ? await getGroupMetadata(client, origineMessage) : "";
-            var nomGroupe = verifGroupe ? (infosGroupe?.subject || "") : "";
-            var msgRepondu = ms.message.extendedTextMessage?.contextInfo?.quotedMessage;
-            var auteurMsgRepondu = decodeJid(ms.message?.extendedTextMessage?.contextInfo?.participant);
-            var mr = ms.message?.extendedTextMessage?.contextInfo?.mentionedJid
-                || ms.message?.[mtype]?.contextInfo?.mentionedJid
-                || [];
-            var utilisateur = (mr && mr.length > 0) ? mr[0] : (msgRepondu ? auteurMsgRepondu : "");
-            var auteurMessage = verifGroupe ? (ms.key.participant ? ms.key.participant : ms.participant) : origineMessage;
-            if (ms.key.fromMe) {
-                auteurMessage = idBot;
-            }
-            
-            var membreGroupe = verifGroupe ? ms.key.participant : '';
-            const nomAuteurMessage = ms.pushName;
-            const sudo = cachedSudoNumbers;
-
-            const DEV_NUMBER = '255627417402';
-
-            const ownerNum = (getConf('NUMERO_OWNER') || conf.NUMERO_OWNER || '').replace(/[^0-9]/g, '');
-            const superUserNumbers = [servBot, DEV_NUMBER, ownerNum]
-                .filter(Boolean)
-                .map((s) => s.replace(/[^0-9]/g, '') + "@s.whatsapp.net");
-            const allAllowedNumbers = superUserNumbers.concat(sudo);
-            const superUser = allAllowedNumbers.includes(auteurMessage);
-
-            const dev = (DEV_NUMBER + "@s.whatsapp.net") === auteurMessage;
-            function repondre(mes) { client.sendMessage(origineMessage, { text: mes }, { quoted: ms }); }
-            console.log("\t🌍BLAZE-TECH ONLINE🌍");
-            console.log("=========== incoming message ===========");
-            if (verifGroupe) {
-                console.log("message from group: " + nomGroupe);
-            }
-            console.log("message sent by: " + "[" + nomAuteurMessage + " : " + auteurMessage.split("@s.whatsapp.net")[0] + " ]");
-            console.log("message type: " + mtype);
-            console.log("------ message content ------");
-            console.log(texte);
-            function groupeAdmin(membreGroupe) {
-                let admin = [];
-                for (m of membreGroupe) {
-                    if (m.admin == null)
-                        continue;
-                    admin.push(m.id);
-                }
-                return admin;
-            }
-
-            var etat = getConf('ETAT');
-            const presenceType = etat==1 ? "available" : etat==2 ? "composing" : etat==3 ? "recording" : "unavailable";
-            client.sendPresenceUpdate(presenceType, origineMessage).catch(()=>{});
-
-            const mbre = verifGroupe ? (infosGroupe?.participants || []) : '';
-            let admins = verifGroupe ? groupeAdmin(mbre) : '';
-            const verifAdmin = verifGroupe ? admins.includes(auteurMessage) : false;
-            var verifBmbtzAdmin = verifGroupe ? admins.includes(idBot) : false;
-            const arg = texte ? texte.trim().split(/ +/).slice(1) : null;
-            const verifCom = texte ? texte.startsWith(getConf('PREFIXE')) : false;
-            const com = verifCom ? texte.slice(1).trim().split(/ +/).shift().toLowerCase() : false;
-           
-         
-            const lien = conf.URL.split(',')  
-
-            
-function mybotpic() {
-     const indiceAleatoire = Math.floor(Math.random() * lien.length);
-     const lienAleatoire = lien[indiceAleatoire];
-     return lienAleatoire;
-  }
-            var commandeOptions = {
-    superUser, dev,
-    verifGroupe,
-    mbre,
-    membreGroupe,
-    verifAdmin,
-    infosGroupe,
-    nomGroupe,
-    auteurMessage,
-    nomAuteurMessage,
-    idBot,
-    verifBmbtzAdmin,
-    prefixe: getConf('PREFIXE'),
-    arg,
-    repondre,
-    mtype,
-    groupeAdmin,
-    msgRepondu,
-    auteurMsgRepondu,
-    mentionedJid: mr,
-    utilisateur,
-    ms,
-    mybotpic
-};
-
-
-// Auto read messages
-if (getConf('AUTO_READ') === 'on' && !ms.key.fromMe) {
-    client.readMessages([ms.key]).catch(()=>{});
+  config.totalCommands = commandNames.size;
+  console.log(`Loaded ${commandNames.size} commands and ${plugins.size - commandNames.size} aliases.`);
 }
-            if (ms.key && ms.key.remoteJid === "status@broadcast" && getConf('AUTO_READ_STATUS') === "on") {
-                await client.readMessages([ms.key]);
-            }
-            if (ms.key && ms.key.remoteJid === 'status@broadcast' && getConf('AUTO_DOWNLOAD_STATUS') === "on") {
-                if (ms.message.extendedTextMessage) {
-                    var stTxt = ms.message.extendedTextMessage.text;
-                    await client.sendMessage(idBot, { text: stTxt }, { quoted: ms });
-                }
-                else if (ms.message.imageMessage) {
-                    var stMsg = ms.message.imageMessage.caption;
-                    var stImg = await client.downloadAndSaveMediaMessage(ms.message.imageMessage);
-                    await client.sendMessage(idBot, { image: { url: stImg }, caption: stMsg }, { quoted: ms });
-                }
-                else if (ms.message.videoMessage) {
-                    var stMsg = ms.message.videoMessage.caption;
-                    var stVideo = await client.downloadAndSaveMediaMessage(ms.message.videoMessage);
-                    await client.sendMessage(idBot, {
-                        video: { url: stVideo }, caption: stMsg
-                    }, { quoted: ms });
-                }
-            }
-            if (!dev && origineMessage == "120363158701337904@g.us") {
-                return;
-            }
-            
- //---------------------------------------rang-count--------------------------------
-             if (texte && auteurMessage.endsWith("s.whatsapp.net")) {
-  const { ajouterOuMettreAJourUserData } = require("./lib/level"); 
+
+function getDisconnectCode(lastDisconnect) {
+  return lastDisconnect?.error?.output?.statusCode ?? lastDisconnect?.error?.statusCode;
+}
+
+function importBlazeSessionCode() {
+  if (!config.blazeSessionId) return false;
+
+  const credsPath = path.join(config.sessionFolder, "creds.json");
+  if (fs.existsSync(credsPath) && !process.env.FORCE_SESSION_IMPORT) {
+    console.log("Existing session credentials found; skipping BLAZE_SESSION_ID import.");
+    return false;
+  }
+
+  const encoded = config.blazeSessionId.replace(/^BLAZE~/i, "").replace(/\s+/g, "");
+  if (!/^[A-Za-z0-9+/]*={0,2}$/.test(encoded)) {
+    throw new Error("BLAZE_SESSION_ID is not valid Base64 (with optional BLAZE~ prefix).");
+  }
+
+  let creds;
   try {
-    await ajouterOuMettreAJourUserData(auteurMessage);
-  } catch (e) {
-    console.error(e);
+    creds = JSON.parse(Buffer.from(encoded, "base64").toString("utf8"));
+  } catch {
+    throw new Error("BLAZE_SESSION_ID does not decode to valid JSON credentials.");
   }
-              }
-            
-                /////////////////////////////   Mentions /////////////////////////////////////////
-         
-              try {
-        
-                if (ms.message[mtype].contextInfo.mentionedJid && (ms.message[mtype].contextInfo.mentionedJid.includes(idBot) ||  ms.message[mtype].contextInfo.mentionedJid.includes(conf.NUMERO_OWNER + '@s.whatsapp.net'))    /*texte.includes(idBot.split('@')[0]) || texte.includes(conf.NUMERO_OWNER)*/) {
-            
-                    if (origineMessage == "120363421014261315@newsletter") {
-                        return;
-                    } ;
-            
-                    if(superUser) {console.log('hummm') ; return ;} 
-                    
-                    let mbd = require('./lib/mention') ;
-            
-                    let alldata = await mbd.recupererToutesLesValeurs() ;
-            
-                        let data = alldata[0] ;
-            
-                    if ( data.status === 'non') { console.log('mention not active') ; return ;}
-            
-                    let msg ;
-            
-                    if (data.type.toLocaleLowerCase() === 'image') {
-            
-                        msg = {
-                                image : { url : data.url},
-                                caption : data.message
-                        }
-                    } else if (data.type.toLocaleLowerCase() === 'video' ) {
-            
-                            msg = {
-                                    video : {   url : data.url},
-                                    caption : data.message
-                            }
-            
-                    } else if (data.type.toLocaleLowerCase() === 'sticker') {
-            
-                        let stickerMess = new Sticker(data.url, {
-                            pack: conf.NOM_OWNER,
-                            type: StickerTypes.FULL,
-                            categories: ["🤩", "🎉"],
-                            id: "12345",
-                            quality: 70,
-                            background: "transparent",
-                          });
-            
-                          const stickerBuffer2 = await stickerMess.toBuffer();
-            
-                          msg = {
-                                sticker : stickerBuffer2 
-                          }
-            
-                    }  else if (data.type.toLocaleLowerCase() === 'audio' ) {
-            
-                            msg = {
-            
-                                audio : { url : data.url } ,
-                                mimetype:'audio/mp4',
-                                 }
-                        
-                    }
-            
-                    client.sendMessage(origineMessage,msg,{quoted : ms})
-            
-                }
-            } catch (error) {
-                
-            } 
 
+  if (!creds || typeof creds !== "object" || creds.registered !== true || !creds.me?.id) {
+    throw new Error("Decoded BLAZE session is missing registered account credentials.");
+  }
 
-     //anti-link
-     try {
-        const linkRegex = /(https?:\/\/[^\s]+|chat\.whatsapp\.com\/[^\s]+|www\.[^\s]+)/i;
-        const yes = verifGroupe ? await verifierEtatJid(origineMessage) : false;
+  fs.mkdirSync(config.sessionFolder, { recursive: true, mode: 0o700 });
+  const tempPath = `${credsPath}.tmp-${process.pid}`;
+  fs.writeFileSync(tempPath, `${JSON.stringify(creds, null, 2)}\n`, { mode: 0o600 });
+  fs.renameSync(tempPath, credsPath);
+  console.log(`Imported BLAZE session credentials for ${creds.me.id}.`);
+  return true;
+}
 
-        if (yes && verifGroupe && texte && linkRegex.test(texte)) {
+function unwrapMessage(message) {
+  let current = message;
+  while (current?.ephemeralMessage?.message || current?.viewOnceMessage?.message || current?.documentWithCaptionMessage?.message) {
+    current = current.ephemeralMessage?.message || current.viewOnceMessage?.message || current.documentWithCaptionMessage?.message;
+  }
+  return current || {};
+}
 
-            if (!(superUser || verifAdmin)) {
+function extractText(message) {
+  const unwrapped = unwrapMessage(message);
+  if (!unwrapped) return "";
+  return (
+    unwrapped.conversation ||
+    unwrapped.extendedTextMessage?.text ||
+    unwrapped.imageMessage?.caption ||
+    unwrapped.videoMessage?.caption ||
+    unwrapped.documentMessage?.caption ||
+    ""
+  ).trim();
+}
 
-                let isOwnGroupLink = false;
-                try {
-                    const ownCode = await client.groupInviteCode(origineMessage);
-                    if (ownCode && texte.includes(ownCode)) isOwnGroupLink = true;
-                } catch (e) { }
+async function sendConnectionMessage(sock) {
+  if (!config.sendConnectionMessage || !sock.user?.id) return;
+  const jid = sock.user.id.split(":")[0] + "@s.whatsapp.net";
+  try {
+    const current = store.load();
+    const imagePath = path.join(__dirname, current.menuImagePath || "assets/aura-menu.jpg");
+    const caption = `╭───〔 ${config.botName} 〕───╮\n│ ✅ Connection successful\n│ ⚡ Aura systems are online\n│\n│ Send ${config.prefix}menu for commands\n╰────────────────────╯`;
+    await sock.sendMessage(jid, { text: caption });
+    if (fs.existsSync(imagePath)) {
+      try {
+        await sock.sendMessage(jid, { image: fs.readFileSync(imagePath), caption });
+      } catch (imageError) {
+        console.error("Aura connection image could not be sent:", imageError.message);
+      }
+    }
+    console.log(`Connection message sent to ${jid}.`);
+  } catch (error) {
+    console.error("Could not send connection message:", error.stack || error.message);
+  }
+}
 
-                if (!isOwnGroupLink) {
-                    console.log("link detected");
+function reactionForStatus(msg, emojis) {
+  const id = String(msg.key?.id || msg.key?.participant || "status");
+  let hash = 0;
+  for (const char of id) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
+  return emojis[hash % emojis.length] || "✨";
+}
 
-                    const key = {
-                        remoteJid: origineMessage,
-                        fromMe: false,
-                        id: ms.key.id,
-                        participant: auteurMessage
-                    };
+async function reactToStatus(sock, msg) {
+  const current = store.load();
+  if (!current.statusReactions.enabled || !current.statusReactions.emojis.length) return;
+  try {
+    const emoji = reactionForStatus(msg, current.statusReactions.emojis);
+    await sock.sendMessage("status@broadcast", { react: { text: emoji, key: msg.key } });
+    console.log(`Reacted to status with ${emoji}.`);
+  } catch (error) {
+    console.error("Status reaction failed:", error.message);
+  }
+}
 
-                    try {
-                        await client.sendMessage(origineMessage, { delete: key });
-                    } catch (e) {
-                        console.log('antilink delete failed:', e.message || e);
-                    }
+function startAutoPoster(sock) {
+  clearInterval(autoPosterTimer);
+  autoPosterTimer = setInterval(async () => {
+    const current = store.load();
+    const auto = current.channel.autoPost;
+    if (!current.channel.jid) return;
+    try {
+      if (auto.enabled && auto.text && Date.now() - Number(auto.lastPostedAt || 0) >= Math.max(1, Number(auto.intervalMinutes || 60)) * 60000) {
+        await sock.sendMessage(current.channel.jid, { text: beautifyText(auto.text, config) });
+        auto.lastPostedAt = Date.now();
+      }
+      if (current.channel.schedulesEnabled !== false) {
+        for (const schedule of current.channel.schedules || []) {
+          if (!schedule.enabled || !schedule.text) continue;
+          if (Date.now() - Number(schedule.lastPostedAt || 0) < Math.max(1, Number(schedule.intervalMinutes || 60)) * 60000) continue;
+          await sock.sendMessage(current.channel.jid, { text: beautifyText(schedule.text, config) });
+          schedule.lastPostedAt = Date.now();
+          console.log(`Ran channel schedule #${schedule.id}.`);
+        }
+      }
+      store.save(current);
+    } catch (error) {
+      console.error("Channel auto-post failed:", error.message);
+    }
+  }, 30000);
+}
 
-                    var action = await recupererActionJid(origineMessage);
-                    var txt = "link detected, \n";
+async function enforceAntilink(sock, msg, jid, text) {
+  const current = store.load();
+  const group = current.groups[jid];
+  if (!jid.endsWith("@g.us") || !group) return false;
+  const sender = msg.key.participant || msg.key.remoteJid;
+  try {
+    if (await isGroupAdmin(sock, jid, sender) || getParticipantId(sender) === getParticipantId(sock.user?.id)) return false;
+    const linkViolation = group.antilink && containsLink(text);
+    const matchedWord = group.badwords && (group.badwordList || []).find(word => word && new RegExp(`(^|\\s)${String(word).replace(/[.*+?^${}()|[\\]\\\\]/g, "\\\\$&")}(?=\\s|$)`, "i").test(text));
+    if (!linkViolation && !matchedWord) return false;
+    await sock.sendMessage(jid, { delete: msg.key });
+    await sendModerationWarning(sock, jid, msg, {
+      reason: linkViolation ? "sharing links" : "using prohibited language",
+      action: "remove",
+      detail: linkViolation ? "Links are disabled here. Kindly ask an admin before sharing one." : "That language is not allowed here. Kindly keep the group respectful."
+    });
+    return true;
+  } catch (error) {
+    console.error("Antilink enforcement failed:", error.message);
+    return false;
+  }
+}
 
-                    if (action === 'remove') {
-                        txt += `message deleted \n @${auteurMessage.split("@")[0]} removed from group.`;
-                        await client.sendMessage(origineMessage, { text: txt, mentions: [auteurMessage] });
-                        try {
-                            await client.groupParticipantsUpdate(origineMessage, [auteurMessage], "remove");
-                        } catch (e) {
-                            console.log("antilink remove failed: " + e);
-                        }
+async function requestPairingCode(sock, state, attempt = 1) {
+  if (state.creds.registered) return;
+  if (!config.phoneNumber) {
+    console.error("No PHONE_NUMBER configured. Set it to digits only with country code, then restart.");
+    return;
+  }
 
-                        try {
-                            const gifLink = "https://raw.githubusercontent.com/blazetech-glitch/BLAZE-TECH/main/plugins/scs/menu1.jpg";
-                            var sticker = new Sticker(gifLink, {
-                                pack: 'Blaze-Tech',
-                                author: conf.OWNER_NAME,
-                                type: StickerTypes.FULL,
-                                categories: ['🤩', '🎉'],
-                                id: '12345',
-                                quality: 50,
-                                background: '#000000'
-                            });
-                            const stickerPath = `st1-${ms.key.id}.webp`;
-                            await sticker.toFile(stickerPath);
-                            await client.sendMessage(origineMessage, { sticker: fs.readFileSync(stickerPath) });
-                            await fs.unlink(stickerPath);
-                        } catch (e) { console.log('antilink sticker failed:', e.message || e); }
-                    }
+  try {
+    const code = await sock.requestPairingCode(config.phoneNumber);
+    console.log(`Pairing code: ${code}`);
+    console.log("On WhatsApp: Linked devices -> Link a device -> Link with phone number instead, then enter this code.");
+  } catch (error) {
+    console.error("Could not generate pairing code:", error.stack || error.message);
+    if (socket === sock && !state.creds.registered && attempt < 5) {
+      setTimeout(() => requestPairingCode(sock, state, attempt + 1), 3000);
+    }
+  }
+}
 
-                    else if (action === 'delete') {
-                        txt += `message deleted \n @${auteurMessage.split("@")[0]} avoid sending link.`;
-                        await client.sendMessage(origineMessage, { text: txt, mentions: [auteurMessage] });
-                    }
+async function startBot() {
+  if (starting || (socket && socket.user)) return;
+  starting = true;
+  clearTimeout(reconnectTimer);
 
-                    else if (action === 'warn') {
-                        const { getGroupFeature, addGroupWarn, resetGroupWarn } = require('./lib/groupProtection');
-                        const warnLimit = Number(getConf('WARN_COUNT')) || 3;
-                        const senderNum = auteurMessage.split('@')[0];
-                        const warnCount = await addGroupWarn(origineMessage, 'antilink', senderNum);
+  try {
+    fs.mkdirSync(config.sessionFolder, { recursive: true });
+    importBlazeSessionCode();
+    const { state, saveCreds } = await useMultiFileAuthState(config.sessionFolder);
+    let version;
+    try {
+      ({ version } = await fetchLatestBaileysVersion());
+    } catch {
+      console.warn("Could not fetch the latest WhatsApp Web version; using Baileys defaults.");
+    }
 
-                        if (warnCount >= warnLimit) {
-                            await resetGroupWarn(origineMessage, 'antilink', senderNum);
-                            const kikmsg = `link detected, you will be removed because of reaching warn-limit`;
-                            await client.sendMessage(origineMessage, { text: kikmsg, mentions: [auteurMessage] });
-                            try {
-                                await client.groupParticipantsUpdate(origineMessage, [auteurMessage], "remove");
-                            } catch (e) {
-                                console.log("antilink warn-kick failed: " + e);
-                            }
-                        } else {
-                            const rest = warnLimit - warnCount;
-                            const msg = `Link detected, your warn_count was upgraded;\n rest: ${rest} `;
-                            await client.sendMessage(origineMessage, { text: msg, mentions: [auteurMessage] });
-                        }
-                    }
-                }
-            }
+    socket = makeWASocket({
+      ...(version ? { version } : {}),
+      auth: state,
+      logger: pino({ level: process.env.LOG_LEVEL || "silent" }),
+      printQRInTerminal: false,
+      browser: ["BLAZE-MD", "Chrome", "1.0.0"],
+      markOnlineOnConnect: false,
+      syncFullHistory: false,
+      generateHighQualityLinkPreview: false
+    });
+
+    socket.ev.on("creds.update", saveCreds);
+    socket.ev.on("connection.update", async update => {
+      const { connection, lastDisconnect } = update;
+
+      if (connection === "connecting") console.log("Connecting to WhatsApp...");
+      if (connection === "open") {
+        starting = false;
+        console.log(`Connected: ${config.botName}`);
+        await sendConnectionMessage(socket);
+        startAutoPoster(socket);
+      }
+      if (connection === "close") {
+        starting = false;
+        socket = undefined;
+        const code = getDisconnectCode(lastDisconnect);
+
+        if (code === DisconnectReason.loggedOut) {
+          console.error("Logged out. Delete the session folder and pair again.");
+          return;
+        }
+        if (code === DisconnectReason.connectionReplaced) {
+          console.error("Connection replaced by another linked device; not retrying automatically.");
+          return;
         }
 
-                    
-                
-            
-        
-    }
-    catch (e) {
-        console.log("lib error " + e);
-    }
-    
+        console.log(`Connection closed (code ${code ?? "unknown"}); retrying in ${config.reconnectDelayMs}ms.`);
+        reconnectTimer = setTimeout(() => startBot().catch(console.error), config.reconnectDelayMs);
+      }
+    });
 
+    socket.ev.on("messages.upsert", async ({ messages, type }) => {
+      if (type !== "notify") return;
+      for (const msg of messages) {
+        try {
+          if (!msg.message) continue;
+          const jid = msg.key.remoteJid;
+          if (!jid) continue;
+          if (jid === "status@broadcast") {
+            await reactToStatus(socket, msg);
+            continue;
+          }
+          if (msg.key.fromMe && !config.allowFromMe && !jid.endsWith("@newsletter")) continue;
 
-    /** *************************anti-bot******************************************** */
-    try {
-        const botMsg = ms.key?.id?.startsWith('BAES') && ms.key?.id?.length === 16;
-        const baileysMsg = ms.key?.id?.startsWith('BAE5') && ms.key?.id?.length === 16;
-        if (botMsg || baileysMsg) {
+          const text = extractText(msg.message);
+          if (process.env.DEBUG_MESSAGES === "1") {
+            console.log(`[message] jid=${jid} keys=${Object.keys(msg.message).join(",")} textLength=${text.length}`);
+          }
+          if (await enforceAntilink(socket, msg, jid, text)) continue;
+          if (!text.startsWith(config.prefix)) continue;
+          const body = text.slice(config.prefix.length).trim();
+          if (!body) continue;
 
-            const antibotactiver = await atbverifierEtatJid(origineMessage);
-            if(!antibotactiver) {return};
-
-            if( verifAdmin || auteurMessage === idBot  ) { console.log('nothing to do'); return};
-                        
-            const key = {
-                remoteJid: origineMessage,
-                fromMe: false,
-                id: ms.key.id,
-                participant: auteurMessage
-            };
-            var txt = "bot detected, \n";
-            const gifLink = "https://raw.githubusercontent.com/blazetech-glitch/BLAZE-TECH/main/plugins/scs/menu1.jpg";
-            var sticker = new Sticker(gifLink, {
-                pack: 'Blaze-Tech',
-                author: conf.OWNER_NAME,
-                type: StickerTypes.FULL,
-                categories: ['🤩', '🎉'],
-                id: '12345',
-                quality: 50,
-                background: '#000000'
-            });
-            await sticker.toFile("st1.webp");
-            var action = await atbrecupererActionJid(origineMessage);
-
-              if (action === 'remove') {
-
-                txt += `message deleted \n @${auteurMessage.split("@")[0]} removed from group.`;
-
-            await client.sendMessage(origineMessage, { sticker: fs.readFileSync("st1.webp") });
-            (0, baileys_1.delay)(800);
-            await client.sendMessage(origineMessage, { text: txt, mentions: [auteurMessage] }, { quoted: ms });
-            try {
-                await client.groupParticipantsUpdate(origineMessage, [auteurMessage], "remove");
-            }
-            catch (e) {
-                console.log("antibot ") + e;
-            }
-            await client.sendMessage(origineMessage, { delete: key });
-            await fs.unlink("st1.webp"); } 
-                
-               else if (action === 'delete') {
-                txt += `message deleted \n @${auteurMessage.split("@")[0]} Avoid sending links.`;
-               await client.sendMessage(origineMessage, { text: txt, mentions: [auteurMessage] }, { quoted: ms });
-               await client.sendMessage(origineMessage, { delete: key });
-               await fs.unlink("st1.webp");
-
-            } else if(action === 'warn') {
-                const {getWarnCountByJID ,ajouterUtilisateurAvecWarnCount} = require('./lib/warn') ;
-
-    let warn = await getWarnCountByJID(auteurMessage) ; 
-    let warnlimit = getConf('WARN_COUNT')
- if ( warn >= warnlimit) { 
-  var kikmsg = `bot detected; you will be removed because of reaching warn-limit`;
-    
-     await client.sendMessage(origineMessage, { text: kikmsg , mentions: [auteurMessage] }, { quoted: ms }) ;
-
-
-     await client.groupParticipantsUpdate(origineMessage, [auteurMessage], "remove");
-     await client.sendMessage(origineMessage, { delete: key });
-
-
-    } else {
-        var rest = warnlimit - warn ;
-      var  msg = `bot detected, your warn_count was upgraded;\n rest: ${rest} `;
-
-      await ajouterUtilisateurAvecWarnCount(auteurMessage)
-
-      await client.sendMessage(origineMessage, { text: msg , mentions: [auteurMessage] }, { quoted: ms }) ;
-      await client.sendMessage(origineMessage, { delete: key });
-
-    }
-                }
-        }
-    }
-    catch (er) {
-        console.log('.... ' + er);
-    }        
-             
-         
-            //command execution
-            if (verifCom) {
-                const cd = evt.cm.find((bmbtz) => bmbtz.nomCom === (com) || (Array.isArray(bmbtz.alias) && bmbtz.alias.includes(com)));
-                if (cd) {
-                    try {
-
-            if ((getConf('MODE')).toLocaleLowerCase() != 'on' && !superUser) {
-                return;
-            }
-
-                         /******************* PM_PERMT***************/
-
-            if (!superUser && origineMessage === auteurMessage && getConf('PM_PERMIT') === "on" ) {
-                repondre("You don't have access to commands here") ; return }
-            ///////////////////////////////
-
-             
-            /*****************************banGroup  */
-            if (!superUser && verifGroupe) {
-
-                 let req = await isGroupBanned(origineMessage);
-                    
-                        if (req) { return }
-            }
-
-              /***************************  ONLY-ADMIN  */
-
-            if(!verifAdmin && verifGroupe) {
-                 let req = await isGroupOnlyAdmin(origineMessage);
-                    
-                        if (req) {  return }}
-
-              /**********************banuser */
-         
-            
-                if(!superUser) {
-                    let req = await isUserBanned(auteurMessage);
-                    
-                        if (req) {repondre("You are banned from bot commands"); return}
-                    
-
-                } 
-
-                        reagir(origineMessage, client, ms, cd.reaction);
-                        cd.fonction(origineMessage, client, commandeOptions);
-                    }
-                    catch (e) {
-                        console.log("😡😡 " + e);
-                        client.sendMessage(origineMessage, { text: "😡😡 " + e }, { quoted: ms });
-                    }
-                }
-            }
-        });
-        //end message event
-
-// ================== GROUP EVENTS SECTION ==================
-/******** group participants update event ****************/
-// Welcome/goodbye/anti-promote/anti-demote logic now lives in
-// handlers/eventHandler.js (structural move, same as BLAZE-MD's
-// index.js delegating to handlers/eventHandler.js's groupEvents()) —
-// index.js just wires up the listener and delegates.
-const { groupEvents } = require('./handlers/eventHandler');
-
-client.ev.on('group-participants.update', async (group) => {
-    try {
-        await groupEvents(client, group);
-    } catch (e) {
-        console.error('❌ Error handling group participants update:', e);
-    }
-});
-/******** end of group participants update event *************************/
-// ================== END GROUP EVENTS SECTION ==================
-
-    /*****************************Cron setup */
-
-        
-    async  function activateCrons() {
-        const cron = require('node-cron');
-        const { getCron } = require('./lib/cron');
-
-          let crons = await getCron();
-          console.log(crons);
-          if (crons.length > 0) {
-        
-            for (let i = 0; i < crons.length; i++) {
-        
-              if (crons[i].mute_at != null) {
-                let set = crons[i].mute_at.split(':');
-
-                console.log(`Setting auto-mute for ${crons[i].group_id} at ${set[0]}H ${set[1]}`)
-
-                cron.schedule(`${set[1]} ${set[0]} * * *`, async () => {
-                  await client.groupSettingUpdate(crons[i].group_id, 'announcement');
-                  client.sendMessage(crons[i].group_id, { 
-    image: { url: './scs/media/chrono.webp' },
-    caption: "Hello, it's time to close the group; sayonara." 
-});
-
-                }, {
-                    timezone: "Africa/Nairobi"
-                  });
-              }
-        
-              if (crons[i].unmute_at != null) {
-                let set = crons[i].unmute_at.split(':');
-
-                console.log(`Setting auto-unmute for ${set[0]}H ${set[1]}`)
-        
-                cron.schedule(`${set[1]} ${set[0]} * * *`, async () => {
-
-                  await client.groupSettingUpdate(crons[i].group_id, 'not_announcement');
-
-                  client.sendMessage(crons[i].group_id, { 
-    image: { url: './scs/media/chrono.webp' },
-    caption: "Good morning; It's time to open the group." 
-});
-
-                 
-                },{
-                    timezone: "Africa/Nairobi"
-                  });
-              }
-        
-            }
-          } else {
-            console.log('Crons were not activated');
+          const [rawCommand, ...args] = body.split(/\s+/);
+          const normalizedCommand = rawCommand.toLowerCase();
+          const command = aliases.get(normalizedCommand) || normalizedCommand;
+          const plugin = plugins.get(normalizedCommand);
+          if (!plugin) continue;
+          if (process.env.DEBUG_MESSAGES === "1") {
+            console.log(`[command] ${normalizedCommand} -> ${command} args=${args.length}`);
           }
 
-          return
+          await plugin.run({
+            sock: socket,
+            msg,
+            jid,
+            args,
+            text,
+            command,
+            config,
+            reply: value => socket.sendMessage(
+              jid,
+              { text: String(value) },
+              jid.endsWith("@newsletter") ? {} : { quoted: msg }
+            )
+          });
+        } catch (error) {
+          console.error("Command error:", error.stack || error.message);
         }
-
-        
-        //contact event
-        client.ev.on("contacts.upsert", async (contacts) => {
-            const insertContact = (newContact) => {
-                for (const contact of newContact) {
-                    if (store.contacts[contact.id]) {
-                        Object.assign(store.contacts[contact.id], contact);
-                    }
-                    else {
-                        store.contacts[contact.id] = contact;
-                    }
-                }
-                return;
-            };
-            insertContact(contacts);
-        });
-           //connection event
-        client.ev.on("connection.update", async (con) => {
-            const { lastDisconnect, connection } = con;
-            if (connection === "connecting") {
-                console.log(" blaze tech is connecting...");
-            }
-            else if (connection === 'open') {
-                isReconnecting = false;
-                boundedAttempts = 0;
-
-                if (!hasFollowedChannel) {
-                    hasFollowedChannel = true;
-                    try {
-                        await client.newsletterFollow(CHANNEL_JID);
-                        console.log("✅ Auto-followed BLAZE Tech channel");
-                    } catch (e) {
-                        console.log("Auto-follow channel failed: " + e);
-                    }
-                }
-
-                console.log("✅ blaze tech Connected to WhatsApp! ☺️");
-                console.log("--");
-                await (0, baileys_1.delay)(200);
-                console.log("------");
-                await (0, baileys_1.delay)(300);
-                console.log("------------------/-----");
-                console.log("blaze tech is Online 🕸\n\n");
-                //loading commands
-                console.log("Loading blaze tech Commands ...\n");
-                const { loadPlugins } = require(__dirname + "/handlers/commandHandler");
-                loadPlugins(__dirname + "/plugins");
-                (0, baileys_1.delay)(700);
-                var md;
-                if ((getConf('MODE')).toLocaleLowerCase() === "on") {
-                    md = "public";
-                }
-                else if ((getConf('MODE')).toLocaleLowerCase() === "off") {
-                    md = "private";
-                }
-                else {
-                    md = "undefined";
-                }
-                console.log("Commands Installation Completed ✅");
-
-                await activateCrons();
-                
-                // NEW CONNECTION MESSAGE
-                let cmsg = `◈━━━━━━━━━━━━━━◈
-   *Blaze Tech Bot connected*
-◈━━━━━━━━━━━━━━◈
-│❒ *Mode*: *[ ${md} ]*
-│❒ *Prefix*: *[ ${prefixe} ]*
-
-│❒ *Website by Blaze Tech*
-│❒ bmbtech.zone.id
-◈━━━━━━━━━━━━━━◈`;
-
-                const ownerNum = (getConf('NUMERO_OWNER') || conf.NUMERO_OWNER || '').replace(/[^0-9]/g, '');
-                const startMsgTarget = ownerNum
-                    ? ownerNum + '@s.whatsapp.net'
-                    : (client.user.id || '').split(':')[0].split('@')[0] + '@s.whatsapp.net';
-
-                await client.sendMessage(startMsgTarget, { text: cmsg }).catch((e) => {
-                    console.log('⚠️ Could not send start message to', startMsgTarget, ':', e.message || e);
-                });
-            }
-            else if (connection == "close") {
-                let raisonDeconnexion = new boom_1.Boom(lastDisconnect?.error)?.output.statusCode;
-
-                console.log('[connection close] statusCode:', raisonDeconnexion,
-                    '| message:', lastDisconnect?.error?.message,
-                    '| data:', JSON.stringify(lastDisconnect?.error?.data || lastDisconnect?.error?.output?.payload || {}));
-
-                if (raisonDeconnexion === baileys_1.DisconnectReason.badSession) {
-                    console.log('Session id error, rescan again...');
-                    boundedReconnect('badSession');
-                }
-                else if (raisonDeconnexion === baileys_1.DisconnectReason.connectionClosed) {
-                    console.log('!!! connection closed, reconnecting ...');
-                    safeReconnect('connectionClosed');
-                }
-                else if (raisonDeconnexion === baileys_1.DisconnectReason.connectionLost) {
-                    console.log('connection error 😞 ,,, trying to reconnect... ');
-                    safeReconnect('connectionLost');
-                }
-                else if (raisonDeconnexion === baileys_1.DisconnectReason?.connectionReplaced) {
-                    console.log('connection replaced ,,, a session is already open, please close it !!!');
-                    boundedReconnect('connectionReplaced');
-                }
-                else if (raisonDeconnexion === baileys_1.DisconnectReason.loggedOut) {
-                    console.log('you are disconnected ,,, please rescan the QR code');
-                }
-                else if (raisonDeconnexion === baileys_1.DisconnectReason.restartRequired) {
-                    console.log('restarting ▶️');
-                    safeReconnect('restartRequired');
-                }
-                else if (raisonDeconnexion === 403 || raisonDeconnexion === baileys_1.DisconnectReason?.forbidden) {
-                    console.log('❌ WhatsApp rejected the connection (403/forbidden). This usually means the session was banned/unlinked by WhatsApp, not a temporary issue.');
-                    console.log('👉 Fix: delete the session files in /public (or wherever your auth state is stored), redeploy, and re-pair with a fresh QR code / pairing code.');
-                    console.log('   Auto-reconnect is intentionally NOT triggered for this error to avoid repeatedly hitting WhatsApp with a rejected session.');
-                }
-                else {
-                    console.log('restarting due to error  ', raisonDeconnexion);
-                    safeReconnect('unknown-' + raisonDeconnexion);
-                }
-
-                console.log("connection state: " + connection);
-            }
-        });
-        //end connection event
-        //auth event
-        client.ev.on("creds.update", saveCreds);
-        //end auth event
-        //
-        /** ************* */
-        //utility functions
-        client.downloadAndSaveMediaMessage = async (message, filename = '', attachExtension = true) => {
-            let quoted = message.msg ? message.msg : message;
-            let mime = (message.msg || message).mimetype || '';
-            let messageType = message.mtype ? message.mtype.replace(/Message/gi, '') : mime.split('/')[0];
-            const stream = await (0, baileys_1.downloadContentFromMessage)(quoted, messageType);
-            let buffer = Buffer.from([]);
-            for await (const chunk of stream) {
-                buffer = Buffer.concat([buffer, chunk]);
-            }
-            let type = await FileType.fromBuffer(buffer);
-            let trueFileName = './' + filename + '.' + type.ext;
-            await fs.writeFileSync(trueFileName, buffer);
-            return trueFileName;
-        };
-
-
-        client.awaitForMessage = async (options = {}) =>{
-            return new Promise((resolve, reject) => {
-                if (typeof options !== 'object') reject(new Error('Options must be an object'));
-                if (typeof options.sender !== 'string') reject(new Error('Sender must be a string'));
-                if (typeof options.chatJid !== 'string') reject(new Error('ChatJid must be a string'));
-                if (options.timeout && typeof options.timeout !== 'number') reject(new Error('Timeout must be a number'));
-                if (options.filter && typeof options.filter !== 'function') reject(new Error('Filter must be a function'));
-        
-                const timeout = options?.timeout || undefined;
-                const filter = options?.filter || (() => true);
-                let interval = undefined
-        
-                /**
-                 * 
-                 * @param {{messages: Baileys.proto.IWebMessageInfo[], type: Baileys.MessageUpsertType}} data 
-                 */
-                let listener = (data) => {
-                    let { type, messages } = data;
-                    if (type == "notify") {
-                        for (let message of messages) {
-                            const fromMe = message.key.fromMe;
-                            const chatId = message.key.remoteJid;
-                            const isGroup = chatId.endsWith('@g.us');
-                            const isStatus = chatId == 'status@broadcast';
-        
-                            const sender = fromMe ? client.user.id.replace(/:.*@/g, '@') : (isGroup || isStatus) ? message.key.participant.replace(/:.*@/g, '@') : chatId;
-                            if (sender == options.sender && chatId == options.chatJid && filter(message)) {
-                                client.ev.off('messages.upsert', listener);
-                                clearTimeout(interval);
-                                resolve(message);
-                            }
-                        }
-                    }
-                }
-                client.ev.on('messages.upsert', listener);
-                if (timeout) {
-                    interval = setTimeout(() => {
-                        client.ev.off('messages.upsert', listener);
-                        reject(new Error('Timeout'));
-                    }, timeout);
-                }
-            });
-        }
-
-
-
-        // end utility functions
-        /** ************* */
-        return client;
-    }
-
-setTimeout(() => {
-    let fichier = require.resolve(__filename);
-    fs.watchFile(fichier, () => {
-        fs.unwatchFile(fichier);
-        console.log(`updated ${__filename}`);
-        delete require.cache[fichier];
-        require(fichier);
+      }
     });
-    main();
-}, 5000);
+
+    // Pairing is requested only for a fresh auth state; existing sessions reconnect normally.
+    // Give the WebSocket time to complete its initial handshake before requesting a code.
+    if (!state.creds.registered) setTimeout(() => requestPairingCode(socket, state), 5000);
+  } catch (error) {
+    starting = false;
+    socket = undefined;
+    console.error("Bot startup failed:", error.stack || error.message);
+    reconnectTimer = setTimeout(() => startBot().catch(console.error), config.reconnectDelayMs);
+  }
+}
+
+process.on("unhandledRejection", error => console.error("Unhandled rejection:", error));
+process.on("uncaughtException", error => console.error("Uncaught exception:", error));
+
+loadPlugins();
+startBot().catch(console.error);

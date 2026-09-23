@@ -1,0 +1,295 @@
+"use strict";
+/**
+ * settings.js
+ *
+ * Bot-wide toggle commands (anticall, antidelete, autolikestatus, etc.)
+ *
+ * Rewritten to fix two problems in the previous version:
+ *   1. Some commands wrote to a settings-object key that index.js never
+ *      actually read (e.g. "antidelete" wrote to ADM, but index.js reads
+ *      ANTIDELETE; "autoreact"/"autolikestatus" wrote to AUTO_REACT /
+ *      AUTO_LIKE_STATUS, but index.js reads AUTO_REACT_STATUS) — so
+ *      those toggles silently did nothing. Every command below now
+ *      writes the exact key index.js reads.
+ *   2. All of them mutated the settings.js module object in memory only
+ *      — this is never persisted, so every setting silently reverted to
+ *      its .env default on the next restart/redeploy (which on Heroku
+ *      happens often). They now persist via database/db.js (through
+ *      lib/settingsCache.js's write-through cache), matching how
+ *      BLAZE-XMD keeps bot settings in its database instead of app.json.
+ */
+const { blazetz } = require("../../devblaze/blazetz");
+const { getCachedSettingsSync, updateCachedSetting } = require("../../lib/settingsCache");
+const s = require("../../settings");
+
+const NEWSLETTER_JID = "120363421014261315@newsletter";
+const NEWSLETTER_NAME = "BLAZE TECH OFFICIAL";
+const { getAutoContactState, setAutoContactEnabled, getAutoContacts } = require('../../lib/autoContacts');
+const { FIELDS: BUSINESS_FIELDS, getBusinessProfile, updateBusinessProfile, setBusinessEnabled, clearBusinessProfile } = require('../../lib/businessProfile');
+
+const newsletterContext = {
+  contextInfo: {
+    forwardingScore: 999,
+    isForwarded: true,
+    forwardedNewsletterMessageInfo: {
+      newsletterJid: NEWSLETTER_JID,
+      newsletterName: NEWSLETTER_NAME
+    }
+  }
+};
+
+async function sendBox(chatId, client, ms, title, message) {
+  const box = `\n╔══════════════════╗\n    *${title}* \n╚══════════════════╝\n\n${message}\n  `;
+  try {
+    await client.sendMessage(chatId, { text: box, ...newsletterContext }, { quoted: ms });
+  } catch (error) {
+    console.error(`Error sending box message (${title}):`, error);
+    try {
+      await client.sendMessage(chatId, { text: '⚠️ Error processing your request.' }, { quoted: ms });
+    } catch (e) {
+      console.error('Failed fallback send:', e);
+    }
+  }
+}
+
+/**
+ * Generic on/off toggle registrar. `settingKey` MUST match a key that
+ * index.js actually reads via getConf('KEY') — see index.js's
+ * getConf() helper.
+ */
+function registerToggleCommand(commandName, settingKey, enabledValue, disabledValue, title, enabledText, disabledText, aliasList) {
+  blazetz({
+    nomCom: commandName,
+    alias: aliasList || [],
+    categorie: "Settings"
+  }, async (chatId, client, context) => {
+    const { ms, repondre, superUser, arg } = context;
+
+    if (!superUser) {
+      return repondre("*This command is only allowed to be controlled by the owner.👤");
+    }
+
+    const current = getCachedSettingsSync()[settingKey] ?? s[settingKey];
+
+    if (!arg[0]) {
+      const help = `Current: *${current}*\n\n👉 Usage:\n- Type: *${commandName} on*  to enable\n- Type: *${commandName} off*   to disable`;
+      return sendBox(chatId, client, ms, title, help);
+    }
+
+    const option = arg.join(' ').toLowerCase();
+    let responseMessage;
+
+    switch (option) {
+      case "on":
+        await updateCachedSetting(settingKey, enabledValue);
+        responseMessage = enabledText || "has been enabled successfully.";
+        break;
+
+      case "off":
+        await updateCachedSetting(settingKey, disabledValue);
+        responseMessage = disabledText || "has been disabled successfully.";
+        break;
+
+      default:
+        return sendBox(chatId, client, ms, title, "❌ Invalid option.\nUse: *" + commandName + " on* or *" + commandName + " off*.");
+    }
+
+    return sendBox(chatId, client, ms, title, responseMessage);
+  });
+}
+
+//=============== COMMAND REGISTRATIONS ===============//
+
+blazetz({
+  nomCom: 'autocontact',
+  alias: ['autoaddcontact', 'savecontacts'],
+  categorie: 'Settings',
+  author: 'ARNOLDT20'
+}, async (chatId, client, context) => {
+  const { repondre, superUser, arg = [] } = context;
+  if (!superUser) return repondre('❌ Only the bot owner can control auto-contact saving.');
+  const option = String(arg[0] || '').toLowerCase();
+  if (!['on', 'off', 'status', 'list'].includes(option)) {
+    return repondre('📇 *AUTO-CONTACT*\n\nUse `.autocontact on` to add new private senders to the bot-side contact directory.\nUse `.autocontact off` to disable detection.\nUse `.autocontact status` or `.autocontact list` to inspect the directory.');
+  }
+  if (option === 'status') {
+    const state = await getAutoContactState();
+    return repondre(`📇 *AUTO-CONTACT*\n\nStatus: *${state.enabled.toUpperCase()}*\nBot-side contacts: *${Object.keys(state.contacts).length}*\nNew private senders are ${state.enabled === 'on' ? 'registered locally once.' : 'not automatically registered.'}`);
+  }
+  if (option === 'list') {
+    const contacts = await getAutoContacts();
+    if (!contacts.length) return repondre('📇 The bot-side contact directory is empty.');
+    const lines = contacts.slice(-30).reverse().map((contact, index) => `${index + 1}. *${contact.name}* — ${contact.jid.split('@')[0]}\n   Added: ${new Date(contact.addedAt).toLocaleString()}`);
+    return repondre(`📇 *BLAZE TECH CONTACT DIRECTORY*\n\n${lines.join('\n')}`);
+  }
+  const status = await setAutoContactEnabled(option === 'on');
+  return repondre(`✅ Auto-contact is now *${status.toUpperCase()}*.\n\nNew private senders will ${status === 'on' ? 'be added to the bot-side directory once.' : 'no longer be registered automatically.'}`);
+});
+blazetz({
+  nomCom: 'business',
+  alias: ['biz', 'businessbot'],
+  categorie: 'Settings',
+  author: 'ARNOLDT20'
+}, async (chatId, client, context) => {
+  const { repondre, superUser, arg = [] } = context;
+  if (!superUser) return repondre('❌ Only the bot owner can configure the business assistant.');
+  const option = String(arg[0] || '').toLowerCase();
+  if (option === 'on' || option === 'off') {
+    const profile = await setBusinessEnabled(option === 'on');
+    return repondre(`✅ *BUSINESS ASSISTANT ${profile.enabled.toUpperCase()}*\n\nCustomer replies are now ${profile.enabled === 'on' ? 'active for private chats.' : 'paused.'}`);
+  }
+  if (option === 'status') {
+    const profile = await getBusinessProfile();
+    return repondre(`🏢 *BUSINESS ASSISTANT*\n\nStatus: *${profile.enabled.toUpperCase()}*\nBusiness: *${profile.name || 'Not configured'}*\nType: ${profile.category || 'Not set'}\nServices: ${profile.services || 'Not set'}\nHours: ${profile.hours || 'Not set'}\nTone: ${profile.tone}\n\nUse .business help for setup.`);
+  }
+  if (option === 'clear') {
+    await clearBusinessProfile();
+    return repondre('🧹 Business profile cleared and assistant paused.');
+  }
+  if (option === 'set') {
+    const field = String(arg[1] || '').toLowerCase();
+    const value = arg.slice(2).join(' ').trim();
+    if (!BUSINESS_FIELDS.includes(field) || !value) return repondre(`🏢 Use: .business set field value\n\nFields: ${BUSINESS_FIELDS.join(', ')}`);
+    await updateBusinessProfile(field, value);
+    return repondre(`✅ Business *${field}* updated. Use .business status to review the profile.`);
+  }
+  return repondre('🏢 *BLAZE BUSINESS ASSISTANT*\n\n`.business set name Your Business`\n`.business set category Retail and Delivery`\n`.business set services Products or services`\n`.business set hours Mon-Sat 08:00-18:00`\n`.business set location Your location`\n`.business set phone +255...`\n`.business set price Pricing guidance`\n`.business set policy Return or booking policy`\n`.business set tone Warm, brief, professional`\n`.business set instructions Always ask before confirming an order`\n`.business set greeting Your preferred greeting`\n`.business on` / `.business off`\n`.business status` / `.business clear`');
+});
+// Each settingKey below matches exactly what index.js's getConf() reads.
+
+registerToggleCommand("anticall", "ANTICALL", "on", "off", "ANTI-CALL MODE",
+  "✅ Anti-call has been *enabled* successfully.",
+  "❌ Anti-call has been *disabled* successfully.");
+
+registerToggleCommand("autolikestatus", "AUTO_REACT_STATUS", "on", "off", "AUTO-LIKE STATUS",
+  "✅ Auto-like status has been *enabled* successfully.",
+  "❌ Auto-like status has been *disabled* successfully.",
+  ["likestatus", "autolike"]);
+
+registerToggleCommand("readstatus", "AUTO_READ_STATUS", "on", "off", "AUTO-READ STATUS",
+  "✅ Auto-read status has been *enabled* successfully.",
+  "❌ Auto-read status has been *disabled* successfully.",
+  ["autoviewstatus", "viewstatus"]);
+
+registerToggleCommand("antidelete", "ANTIDELETE", "on", "off", "ANTI-DELETE MODE",
+  "✅ Anti-delete has been *enabled* successfully.",
+  "❌ Anti-delete has been *disabled* successfully.");
+
+registerToggleCommand("downloadstatus", "AUTO_DOWNLOAD_STATUS", "on", "off", "DOWNLOAD STATUS",
+  "✅ Auto-download status has been *enabled* successfully.",
+  "❌ Auto-download status has been *disabled* successfully.");
+
+// Incoming-message read receipts are intentionally disabled in index.js.
+// No toggle is registered so the bot cannot falsely report that it enabled them.
+
+registerToggleCommand("pm-permit", "PM_PERMIT", "on", "off", "PM PERMIT",
+  "✅ PM permit has been *enabled* successfully.",
+  "❌ PM permit has been *disabled* successfully.");
+
+// Presence state (ETAT): 1=online, 2=typing, 3=recording, off=none — one
+// shared key, three convenience commands to set it (matches the
+// original numeric scheme index.js's presenceType switch expects).
+registerToggleCommand("autorecord", "ETAT", "3", "off", "AUTO-RECORD",
+  "✅ Auto-record has been *enabled* successfully.",
+  "❌ Auto-record has been *disabled* successfully.");
+
+registerToggleCommand("autotyping", "ETAT", "2", "off", "AUTO-TYPING",
+  "✅ Auto-typing has been *enabled* successfully.",
+  "❌ Auto-typing has been *disabled* successfully.");
+
+registerToggleCommand("alwaysonline", "ETAT", "1", "off", "ALWAYS ONLINE",
+  "✅ Always-online has been *enabled* successfully.",
+  "❌ Always-online has been *disabled* successfully.");
+
+// mode (public / private)
+blazetz({
+  nomCom: "mode",
+  categorie: "Settings"
+}, async (chatId, client, context) => {
+  const { ms, repondre, superUser, arg } = context;
+
+  if (!superUser) {
+    return repondre("*This command is only allowed to be controlled by the owner.👤");
+  }
+
+  if (!arg[0]) {
+    const current = getCachedSettingsSync().MODE ?? s.MODE;
+    const help = `Current: *${current === 'on' ? 'public' : 'private'}*\n\n👉 Usage:\n- Type: *mode public*  → bot will reply to everyone\n- Type: *mode private* → bot will reply to owner/sudo only`;
+    return sendBox(chatId, client, ms, "BOT MODE", help);
+  }
+
+  const option = arg.join(" ").toLowerCase();
+
+  switch (option) {
+    case "public":
+      await updateCachedSetting("MODE", "on");
+      return sendBox(chatId, client, ms, "BOT MODE", "✅ Bot is now in *Public Mode* — it will reply to everyone.");
+
+    case "private":
+      await updateCachedSetting("MODE", "off");
+      return sendBox(chatId, client, ms, "BOT MODE", "🔒 Bot is now in *Private Mode* — it will reply to owner/sudo only.");
+
+    default:
+      return sendBox(chatId, client, ms, "BOT MODE", "❌ Invalid option.\nUse: *mode public* or *mode private*.");
+  }
+});
+
+//=============== SET PREFIX ===============//
+
+blazetz({
+  nomCom: "setprefix",
+  categorie: "Settings"
+}, async (chatId, client, context) => {
+  const { ms, repondre, superUser, arg } = context;
+
+  if (!superUser) {
+    return repondre("*This command is only allowed to be controlled by the owner.👤");
+  }
+
+  const currentPrefix = getCachedSettingsSync().PREFIXE ?? s.PREFIXE;
+
+  if (!arg[0]) {
+    const help = `👉 Usage:\n- Type: *setprefix <newprefix>*\n\nCurrent prefix: *${currentPrefix}*`;
+    return sendBox(chatId, client, ms, "SET PREFIX", help);
+  }
+
+  const newPrefix = arg[0];
+
+  if (!newPrefix || /\s/.test(newPrefix)) {
+    return sendBox(chatId, client, ms, "SET PREFIX", "❌ Write prefix without spaces, example: *setprefix !*");
+  }
+
+  await updateCachedSetting("PREFIXE", newPrefix);
+
+  return sendBox(
+    chatId,
+    client,
+    ms,
+    "SET PREFIX",
+    `✅ Prefix has been changed to: *${newPrefix}*\n\nChanges are now active, no restart needed.`
+  );
+});
+
+//=============== SET WARN LIMIT ===============//
+
+blazetz({
+  nomCom: "setwarnlimit",
+  categorie: "Settings"
+}, async (chatId, client, context) => {
+  const { ms, repondre, superUser, arg } = context;
+
+  if (!superUser) {
+    return repondre("*This command is only allowed to be controlled by the owner.👤");
+  }
+
+  const current = getCachedSettingsSync().WARN_COUNT ?? s.WARN_COUNT;
+
+  if (!arg[0] || isNaN(Number(arg[0]))) {
+    const help = `👉 Usage:\n- Type: *setwarnlimit <number>*\n\nCurrent limit: *${current}*`;
+    return sendBox(chatId, client, ms, "WARN LIMIT", help);
+  }
+
+  await updateCachedSetting("WARN_COUNT", String(Number(arg[0])));
+
+  return sendBox(chatId, client, ms, "WARN LIMIT", `✅ Warn limit set to *${Number(arg[0])}*.`);
+});
